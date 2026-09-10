@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowDownToLine, ArrowRight, Bike, Check, ChevronRight, Download, Globe2, MapPin, Menu, Navigation, ShieldCheck, Smartphone, Sparkles, X, Zap } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, Bike, Car, Check, ChevronRight, Download, Globe2, MapPin, Menu, Navigation, ShieldCheck, Smartphone, Sparkles, X, Zap } from "lucide-react";
 import { useState } from "react";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
 
