@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1788966812056,
+      "tag": "0000_reflective_the_enforcers",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1788966881673,
+      "tag": "0001_whole_shen",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1788969623667,
+      "tag": "0002_large_onslaught",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1788970744177,
+      "tag": "0003_busy_swordsman",
+      "breakpoints": true
+    }
+  ]
+}

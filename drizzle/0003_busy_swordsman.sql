@@ -1,0 +1,1 @@
+ALTER TABLE `rides` ADD `pickupLga` varchar(80);
