@@ -21,6 +21,13 @@ function PwaDownloadButton() {
   return <button onClick={installApp} className="group flex items-center gap-3 rounded-2xl bg-[#f4b942] px-5 py-4 text-[#153a3a] shadow-[0_10px_24px_rgba(244,185,66,0.22)] transition hover:-translate-y-0.5 hover:bg-[#ffd269]"><Download className="h-5 w-5" /><span><span className="block text-[9px] font-black uppercase tracking-[0.12em] opacity-70">Download</span><span className="block text-base font-black">Kkary Driver</span></span><ArrowRight className="ml-auto h-4 w-4 transition-transform group-hover:translate-x-1" /></button>;
 }
 
+const androidInstaller = "#download";
+const iosInstaller = "#download";
+
+function InstallerButton({ platform, href }: { platform: "Android" | "iOS"; href: string }) {
+  return <a href={href} className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-white transition hover:-translate-y-0.5 hover:bg-white/15"><Smartphone className="h-4 w-4 text-[#f4c24d]" /><span><span className="block text-[9px] font-semibold uppercase tracking-[0.12em] text-[#b1d7ce]">Available on</span><span className="block text-sm font-extrabold">{platform}</span></span></a>;
+}
+
 const benefits = [
   [WalletCards, "Keep more of every fare", "Transparent commissions set by Kkary. See your gross fare, platform share, and exact earnings after every completed trip."],
   [MapPin, "Choose where you drive", "Set your default L.G.A., go online when it works for you, and receive trips that match your vehicle and operating area."],
