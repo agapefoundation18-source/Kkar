@@ -2,5 +2,10 @@
   "framework": "vite",
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
-  "installCommand": "pnpm install --frozen-lockfile"
+  "installCommand": "pnpm install --frozen-lockfile",
+  "rewrites": [
+    { "source": "/drivers", "destination": "/index.html" },
+    { "source": "/admin", "destination": "/index.html" },
+    { "source": "/404", "destination": "/index.html" }
+  ]
 }
