@@ -47,7 +47,7 @@ Apple Developer and App Store Connect access is required for the iOS signing and
 
 Repeat the same commands from `apps/kkary-rider` to release the Rider app. The current native identifiers are `ng.kkary.driver` and `ng.kkary.rider`. Before building, replace the example API URL in each app's `app.json` with the published Kkary API URL, or set the matching public runtime environment used by the native client.
 
-The website accepts direct Driver installer/store URLs through `VITE_KKARY_DRIVER_ANDROID_INSTALLER` and `VITE_KKARY_DRIVER_IOS_INSTALLER`. After an Android APK or store listing exists, set these values to the final stable URLs and rebuild the website. For iOS, use the TestFlight invitation URL or App Store listing URL rather than an unsupported raw IPA link.
+The website accepts direct Rider and Driver installer/store URLs through `VITE_KKARY_RIDER_ANDROID_INSTALLER`, `VITE_KKARY_RIDER_IOS_INSTALLER`, `VITE_KKARY_DRIVER_ANDROID_INSTALLER`, and `VITE_KKARY_DRIVER_IOS_INSTALLER`. After an Android APK or store listing exists, set these values to the final stable URLs and rebuild the website. For iOS, use the TestFlight invitation URL or App Store listing URL rather than an unsupported raw IPA link. When a variable is omitted, Android falls back to the app's Google Play package URL and iOS falls back to an App Store search for the matching app.
 
 ## Monnify webhook setup
 
@@ -60,6 +60,22 @@ https://<published-kkary-domain>/api/payments/monnify/webhook
 The server validates Monnify's SHA-512 signature, recognizes hosted wallet references (`Kkary-WALLET-*`) and reserved-account transfer events by account number or account reference, verifies paid status, credits the Kkary wallet ledger exactly once using the provider transaction reference, and records the corresponding payment. Replayed events return a duplicate result instead of creating another credit. Pending, failed, and reversed transaction events update payment status without crediting the wallet.
 
 Required server secrets are `MONNIFY_API_KEY`, `MONNIFY_SECRET_KEY`, `MONNIFY_CONTRACT_CODE`, and optionally `MONNIFY_BASE_URL` for sandbox or production. Use the sandbox base URL while testing and switch to the production URL only after Monnify has approved the live contract.
+
+## Robase SMS webhook setup
+
+Configure the Robase workspace webhook as:
+
+```text
+https://<published-kkary-domain>/api/webhooks/robus
+```
+
+Turn the webhook **ON** and enable only `sms.sent`, `sms.delivered`, `sms.failed`, and `sms.blocked`. Kkar verifies Robase's `X-Robase-Signature` HMAC-SHA256 against the raw request body and matches events to SMS records by the Robase message ID. The endpoint acknowledges unsupported events without processing them and requests a retry when a message ID has not yet been recorded. Delivery states map as `pending` → `queued`, `sent` → `sent`, `delivered` → `delivered`, `failed` → `failed`, and `blocked` → `rejected`.
+
+Set the server-only environment variables `ROBASE_API_KEY` and `ROBASE_WEBHOOK_SECRET` from the Robase dashboard. Never expose these values through a `VITE_` variable. Kkar's sender records a message as queued when Robase accepts it; only a delivery webhook marks it delivered.
+
+## Supabase PostgreSQL backend
+
+The server-side Drizzle database uses the Supabase PostgreSQL connection string in `DATABASE_URL`. The PostgreSQL migration is isolated in `drizzle/postgres` and creates Kkar-owned tables and enums under the `kkar` schema; it does not replace the existing Supabase `public` or `auth` tables. Set `DATABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as server-only Vercel environment variables, then apply the migration from a trusted environment with `pnpm exec drizzle-kit migrate --config=drizzle.config.ts`. Do not put database credentials or the service-role key in any `VITE_` variable.
 
 ## Admin controls
 

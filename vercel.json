@@ -2,10 +2,15 @@
   "framework": "vite",
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
-  "installCommand": "pnpm install --frozen-lockfile",
+  "installCommand": "corepack pnpm@10.4.1 install --frozen-lockfile",
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index?__route=$1"
+    },
     { "source": "/drivers", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" },
-    { "source": "/404", "destination": "/index.html" }
+    { "source": "/404", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

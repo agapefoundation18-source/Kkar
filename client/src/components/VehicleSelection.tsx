@@ -8,7 +8,7 @@ import { toast } from "sonner";
 const money = (kobo: number) => `₦${Math.round(kobo / 100).toLocaleString("en-NG")}`;
 
 interface VehicleOption {
-  type: "bike" | "car" | "tricycle";
+  type: "bike" | "car";
   label: string;
   description: string;
   estimatedArrivalSeconds: number;
@@ -26,25 +26,21 @@ interface VehicleSelectionProps {
   disabled?: boolean;
 }
 
-const getVehicleIcon = (type: "bike" | "car" | "tricycle") => {
+const getVehicleIcon = (type: "bike" | "car") => {
   switch (type) {
     case "bike":
       return <Bike className="h-6 w-6" />;
     case "car":
       return <Car className="h-6 w-6" />;
-    case "tricycle":
-      return <Bike className="h-6 w-6 rotate-45" />;
   }
 };
 
-const getVehicleColor = (type: "bike" | "car" | "tricycle") => {
+const getVehicleColor = (type: "bike" | "car") => {
   switch (type) {
     case "bike":
       return "bg-[#e3f2fd] text-[#1976d2]";
     case "car":
       return "bg-[#f3e5f5] text-[#7b1fa2]";
-    case "tricycle":
-      return "bg-[#fff3e0] text-[#e65100]";
   }
 };
 
@@ -59,30 +55,18 @@ export function VehicleSelection({
 }: VehicleSelectionProps) {
   const [selectedType, setSelectedType] = useState<"bike" | "car" | null>(null);
   const [lga, setLga] = useState(currentLga || "Uyo");
+  const detectedLga = trpc.shared.detectLga.useQuery(
+    { lat: pickupLat, lng: pickupLng },
+    { enabled: !currentLga }
+  );
 
-  // Detect LGA from current location
   useEffect(() => {
     if (currentLga) {
       setLga(currentLga);
-    } else {
-      detectLga();
+    } else if (detectedLga.data?.lga) {
+      setLga(detectedLga.data.lga);
     }
-  }, [pickupLat, pickupLng, currentLga]);
-
-  const detectLga = async () => {
-    try {
-      const result = await trpc.shared.detectLga.query({
-        lat: pickupLat,
-        lng: pickupLng,
-      });
-      if (result.lga) {
-        setLga(result.lga);
-      }
-    } catch (error) {
-      console.error("Failed to detect LGA:", error);
-      // Use default LGA
-    }
-  };
+  }, [currentLga, detectedLga.data?.lga]);
 
   // Fetch pricing for current LGA and vehicle type
   const bikePricing = trpc.shared.pricingByLga.useQuery(
@@ -113,7 +97,7 @@ export function VehicleSelection({
 
   // Estimate arrival time (rough calculation: avg 10km/h for distance, 2-5 min response time)
   const estimateArrivalSeconds = (distanceKm: number) => {
-    const travelTimeMin = Math.ceil(distanceKm / 10) * 60;
+    const travelTimeSeconds = Math.ceil((distanceKm / 10) * 60 * 60);
     const responseTimeSeconds = Math.floor(Math.random() * (300 - 120)) + 120; // 2-5 min
     return travelTimeSeconds + responseTimeSeconds;
   };

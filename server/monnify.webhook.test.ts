@@ -15,7 +15,7 @@ function createFakeDb(lookup: (table: unknown) => unknown[]) {
         })),
       })),
     })),
-    insert: vi.fn(() => ({ values: vi.fn(async () => [{ insertId: 88 }]) })),
+    insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: vi.fn(async () => [{ id: 88 }]) })) })),
     update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(async () => undefined) })) })),
   };
 }

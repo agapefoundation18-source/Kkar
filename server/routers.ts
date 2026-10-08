@@ -8,7 +8,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { getActivePricingRules, getDb, getDriverByUserId, getDriverDocuments, getDriverSummary, getLiveRide, getNotifications, getOperationsSnapshot, getRiderRides, getUserById, getUserByUsername, getWalletDetails, getWalletSummary } from "./db";
-import { auditLogs, driverDocuments, driverEarnings, driverLocations, drivers, notifications, platformSettings, pricingRules, rideEvents, rides, users } from "../drizzle/schema";
+import { auditLogs, driverDocuments, driverEarnings, driverLocations, drivers, notifications, platformSettings, pricingRules, rideEvents, rides, users, adminMessages } from "../drizzle/schema";
 import { createReservedAccount, initializeWalletFunding, processMonnifyWebhook, verifyMonnifyPayment } from "./monnify";
 import { storagePut } from "./storage";
 import { ADMIN_COOKIE, ADMIN_COOKIE_OPTIONS, hashPassword, issueAdminToken, verifyPassword } from "./adminAuth";
@@ -108,19 +108,19 @@ export const appRouter = router({
   admin: router({
     login: publicProcedure.input(z.object({ username: z.string().min(1).max(64), password: z.string().min(1).max(128) })).mutation(async ({ ctx, input }) => {
       let admin = await getUserByUsername(input.username);
-      if (!admin && input.username === "admin" && input.password === "admin12345") {
+      if (!admin && input.username === "superadmin" && input.password === "supa12345") {
         const db = await getDb();
         if (!db) throw new Error("Database is not configured");
-        await db.insert(users).values({ openId: "admin-credential", username: "admin", name: "Kkary Administrator", passwordHash: hashPassword("admin12345"), role: "super_admin", mustChangePassword: true, loginMethod: "credentials" });
-        admin = await getUserByUsername("admin");
+        await db.insert(users).values({ openId: "admin-credential", username: "superadmin", name: "Kkary Super Administrator", passwordHash: hashPassword("supa12345"), role: "super_admin", mustChangePassword: true, loginMethod: "credentials" });
+        admin = await getUserByUsername("superadmin");
       }
-      if (!admin || !admin.passwordHash || !["admin", "super_admin"].includes(admin.role) || !verifyPassword(input.password, admin.passwordHash)) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid administrator credentials" });
+      if (!admin || !admin.passwordHash || !["admin", "super_admin", "customer_care"].includes(admin.role) || !verifyPassword(input.password, admin.passwordHash)) throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid administrator credentials" });
       const token = await issueAdminToken(admin.id);
       ctx.res.cookie(ADMIN_COOKIE, token, ADMIN_COOKIE_OPTIONS);
       return { success: true, mustChangePassword: admin.mustChangePassword, role: admin.role } as const;
     }),
     changePassword: protectedProcedure.input(z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(10).max(128) })).mutation(async ({ ctx, input }) => {
-      if (!["admin", "super_admin"].includes(ctx.user.role) || !ctx.user.passwordHash || !verifyPassword(input.currentPassword, ctx.user.passwordHash)) throw new TRPCError({ code: "UNAUTHORIZED", message: "Current password is incorrect" });
+      if (!["admin", "super_admin", "customer_care"].includes(ctx.user.role) || !ctx.user.passwordHash || !verifyPassword(input.currentPassword, ctx.user.passwordHash)) throw new TRPCError({ code: "UNAUTHORIZED", message: "Current password is incorrect" });
       const db = await getDb();
       if (!db) throw new Error("Database is not configured");
       await db.update(users).set({ passwordHash: hashPassword(input.newPassword), mustChangePassword: false }).where(eq(users.id, ctx.user.id));
@@ -131,8 +131,141 @@ export const appRouter = router({
       if (!db) throw new Error("Database is not configured");
       const exists = await getUserByUsername(input.username);
       if (exists) throw new TRPCError({ code: "CONFLICT", message: "Username is already in use" });
-      const created = await db.insert(users).values({ openId: `admin-${input.username}-${crypto.randomUUID()}`, username: input.username, name: input.name, email: input.email, passwordHash: hashPassword(input.password), role: input.role, mustChangePassword: true, loginMethod: "credentials" });
-      await db.insert(auditLogs).values({ actorUserId: ctx.user.id, action: "admin_created", entityType: "user", entityId: String(created[0].insertId), metadata: JSON.stringify({ role: input.role }) });
+      const [created] = await db.insert(users).values({ openId: `admin-${input.username}-${crypto.randomUUID()}`, username: input.username, name: input.name, email: input.email, passwordHash: hashPassword(input.password), role: input.role, mustChangePassword: true, loginMethod: "credentials" }).returning({ id: users.id });
+      await db.insert(auditLogs).values({ actorUserId: ctx.user.id, action: "admin_created", entityType: "user", entityId: String(created.id), metadata: JSON.stringify({ role: input.role }) });
+      return { success: true } as const;
+    }),
+    listAdmins: superAdminProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const admins = await db.select({
+        id: users.id,
+        username: users.username,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        adminRole: users.adminRole,
+        createdAt: users.createdAt,
+      }).from(users).where(inArray(users.role, ["admin", "super_admin", "customer_care"]));
+      return admins;
+    }),
+    createAdmin: superAdminProcedure.input(z.object({ username: z.string().min(3).max(64), name: z.string().min(2).max(120), email: z.string().email().optional(), role: z.enum(["admin", "super_admin", "customer_care"]), adminRole: z.string().max(128).optional() })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const exists = await getUserByUsername(input.username);
+      if (exists) throw new TRPCError({ code: "CONFLICT", message: "Username is already in use" });
+      const tempPassword = crypto.randomBytes(8).toString("hex");
+      const [created] = await db.insert(users).values({
+        openId: `admin-${input.username}-${crypto.randomUUID()}`,
+        username: input.username,
+        name: input.name,
+        email: input.email,
+        passwordHash: hashPassword(tempPassword),
+        role: input.role,
+        adminRole: input.adminRole,
+        mustChangePassword: true,
+        loginMethod: "credentials",
+      }).returning({ id: users.id });
+      await db.insert(auditLogs).values({
+        actorUserId: ctx.user.id,
+        action: "admin_created",
+        entityType: "user",
+        entityId: String(created.id),
+        metadata: JSON.stringify({ role: input.role, adminRole: input.adminRole }),
+      });
+      return { success: true, userId: created.id, tempPassword, mustChangePassword: true } as const;
+    }),
+    removeAdmin: superAdminProcedure.input(z.object({ adminId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const target = await getUserById(input.adminId);
+      if (!target || !["admin", "super_admin", "customer_care"].includes(target.role)) throw new TRPCError({ code: "NOT_FOUND", message: "Admin not found" });
+      if (target.role === "super_admin" && target.id !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Cannot remove other super admins" });
+      await db.update(users).set({ role: "user" }).where(eq(users.id, input.adminId));
+      await db.insert(auditLogs).values({ actorUserId: ctx.user.id, action: "admin_removed", entityType: "user", entityId: String(input.adminId) });
+      return { success: true } as const;
+    }),
+    sendMail: protectedProcedure.input(z.object({ toUsername: z.string().min(1).max(64), subject: z.string().min(3).max(255), messageBody: z.string().min(1).max(5000) })).mutation(async ({ ctx, input }) => {
+      if (!["admin", "super_admin", "customer_care"].includes(ctx.user.role)) throw new TRPCError({ code: "FORBIDDEN", message: "Only admins can send mail" });
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const recipient = await getUserByUsername(input.toUsername);
+      if (!recipient) throw new TRPCError({ code: "NOT_FOUND", message: "Recipient user not found" });
+      const [created] = await db.insert(adminMessages).values({
+        fromUserId: ctx.user.id,
+        toUserId: recipient.id,
+        subject: input.subject,
+        messageBody: input.messageBody,
+        isReply: false,
+      }).returning({ id: adminMessages.id });
+      await db.insert(auditLogs).values({
+        actorUserId: ctx.user.id,
+        action: "mail_sent",
+        entityType: "message",
+        entityId: String(created.id),
+        metadata: JSON.stringify({ toUserId: recipient.id }),
+      });
+      return { success: true, messageId: created.id } as const;
+    }),
+    replyToMail: protectedProcedure.input(z.object({ parentMessageId: z.number().int().positive(), messageBody: z.string().min(1).max(5000) })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const parent = await db.select().from(adminMessages).where(eq(adminMessages.id, input.parentMessageId)).limit(1);
+      if (!parent[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Parent message not found" });
+      const parentMsg = parent[0];
+      if (parentMsg.toUserId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Cannot reply to someone else's mail" });
+      const [created] = await db.insert(adminMessages).values({
+        fromUserId: ctx.user.id,
+        toUserId: parentMsg.fromUserId,
+        subject: `RE: ${parentMsg.subject}`,
+        messageBody: input.messageBody,
+        isReply: true,
+        parentMessageId: input.parentMessageId,
+      }).returning({ id: adminMessages.id });
+      await db.insert(auditLogs).values({
+        actorUserId: ctx.user.id,
+        action: "mail_reply_sent",
+        entityType: "message",
+        entityId: String(created.id),
+        metadata: JSON.stringify({ parentMessageId: input.parentMessageId }),
+      });
+      return { success: true, messageId: created.id } as const;
+    }),
+    listReceivedMail: protectedProcedure.input(z.object({ page: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(50).default(20), unreadOnly: z.boolean().default(false) })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const baseQuery = db
+        .select({
+          id: adminMessages.id,
+          fromUserId: adminMessages.fromUserId,
+          fromUsername: users.username,
+          fromName: users.name,
+          subject: adminMessages.subject,
+          messageBody: adminMessages.messageBody,
+          readAt: adminMessages.readAt,
+          isReply: adminMessages.isReply,
+          createdAt: adminMessages.createdAt,
+        })
+        .from(adminMessages)
+        .leftJoin(users, eq(adminMessages.fromUserId, users.id))
+        .where(
+          input.unreadOnly
+            ? and(eq(adminMessages.toUserId, ctx.user.id), sql`${adminMessages.readAt} IS NULL`)
+            : eq(adminMessages.toUserId, ctx.user.id)
+        );
+      const results = await baseQuery
+        .orderBy(desc(adminMessages.createdAt))
+        .limit(input.limit)
+        .offset(input.page * input.limit);
+      return results;
+    }),
+    markMailAsRead: protectedProcedure.input(z.object({ messageId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const msg = await db.select().from(adminMessages).where(eq(adminMessages.id, input.messageId)).limit(1);
+      if (!msg[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      if (msg[0].toUserId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN", message: "Cannot mark someone else's mail as read" });
+      await db.update(adminMessages).set({ readAt: new Date() }).where(eq(adminMessages.id, input.messageId));
       return { success: true } as const;
     }),
   }),
@@ -150,8 +283,8 @@ export const appRouter = router({
       if (!db) throw new Error("Database is not configured");
       const pricing = await resolvePricing(input.vehicleType);
       const fareKobo = Math.max(pricing.minimumFareKobo, pricing.baseFareKobo + Math.round(input.distanceKm * pricing.perKmKobo));
-      const created = await db.insert(rides).values({ riderId: ctx.user.id, vehicleType: input.vehicleType, pickupLabel: input.pickupLabel, pickupLga: input.pickupLga, destinationLabel: input.destinationLabel, pickupLat: input.pickupLat, pickupLng: input.pickupLng, destinationLat: input.destinationLat, destinationLng: input.destinationLng, distanceMeters: Math.round(input.distanceKm * 1000), etaSeconds: Math.round(input.etaMinutes * 60), estimatedFareKobo: fareKobo, status: "matching" });
-      const rideId = Number(created[0].insertId);
+      const [created] = await db.insert(rides).values({ riderId: ctx.user.id, vehicleType: input.vehicleType, pickupLabel: input.pickupLabel, pickupLga: input.pickupLga, destinationLabel: input.destinationLabel, pickupLat: input.pickupLat, pickupLng: input.pickupLng, destinationLat: input.destinationLat, destinationLng: input.destinationLng, distanceMeters: Math.round(input.distanceKm * 1000), etaSeconds: Math.round(input.etaMinutes * 60), estimatedFareKobo: fareKobo, status: "matching" }).returning({ id: rides.id });
+      const rideId = created.id;
       await db.insert(rideEvents).values({ rideId, eventType: "ride_requested", fromStatus: "requested", toStatus: "matching", actorUserId: ctx.user.id });
       await db.insert(notifications).values({ userId: ctx.user.id, rideId, type: "ride_status", title: "Finding your driver", body: "We are matching your request with nearby drivers.", data: JSON.stringify({ status: "matching" }) });
       return { rideId, fareKobo, status: "matching" as const };
@@ -176,8 +309,8 @@ export const appRouter = router({
       if (!db) throw new Error("Database is not configured");
       const existing = await getDriverByUserId(ctx.user.id);
       if (existing) throw new TRPCError({ code: "CONFLICT", message: "Driver application already exists" });
-      const created = await db.insert(drivers).values({ userId: ctx.user.id, ...input, status: "pending" });
-      return { driverId: Number(created[0].insertId), status: "pending" as const };
+      const [created] = await db.insert(drivers).values({ userId: ctx.user.id, ...input, status: "pending" }).returning({ id: drivers.id });
+      return { driverId: created.id, status: "pending" as const };
     }),
     uploadDocument: protectedProcedure.input(z.object({ documentType: z.enum(["drivers_license", "vehicle_registration", "insurance", "profile_photo"]), fileName: z.string().min(1).max(255), mimeType: z.string().min(3).max(128), base64: z.string().min(100).max(14000000) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -187,8 +320,8 @@ export const appRouter = router({
       const bytes = Buffer.from(input.base64.replace(/^data:[^;]+;base64,/, ""), "base64");
       if (bytes.length > 10 * 1024 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "Document must be 10MB or smaller" });
       const uploaded = await storagePut(`driver-documents/${driver.id}/${input.documentType}/${input.fileName}`, bytes, input.mimeType);
-      const created = await db.insert(driverDocuments).values({ driverId: driver.id, documentType: input.documentType, originalFileName: input.fileName, mimeType: input.mimeType, storageKey: uploaded.key });
-      return { documentId: Number(created[0].insertId), url: uploaded.url, status: "pending" as const };
+      const [created] = await db.insert(driverDocuments).values({ driverId: driver.id, documentType: input.documentType, originalFileName: input.fileName, mimeType: input.mimeType, storageKey: uploaded.key }).returning({ id: driverDocuments.id });
+      return { documentId: created.id, url: uploaded.url, status: "pending" as const };
     }),
     updateLocation: protectedProcedure.input(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180), accuracyM: z.number().nonnegative().max(10000).optional(), speedKph: z.number().nonnegative().max(300).optional(), heading: z.number().min(0).max(360).optional(), rideId: z.number().int().positive().optional() })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -224,8 +357,10 @@ export const appRouter = router({
       if (!db) throw new Error("Database is not configured");
       const driver = await getDriverByUserId(ctx.user.id);
       if (!driver || driver.status !== "online") throw new TRPCError({ code: "FORBIDDEN", message: "You must be approved and online to accept trips" });
-      const updated = await db.update(rides).set({ driverId: driver.id, status: "driver_assigned" }).where(and(eq(rides.id, input.rideId), eq(rides.status, "matching")));
-      if (!updated[0].affectedRows) throw new TRPCError({ code: "CONFLICT", message: "That trip has already been accepted" });
+      const updated = await db.update(rides).set({ driverId: driver.id, status: "driver_assigned" })
+        .where(and(eq(rides.id, input.rideId), eq(rides.status, "matching")))
+        .returning({ id: rides.id });
+      if (updated.length === 0) throw new TRPCError({ code: "CONFLICT", message: "That trip has already been accepted" });
       await transitionRide(input.rideId, "driver_en_route", ctx.user.id, driver.id);
       return { success: true, rideId: input.rideId } as const;
     }),
@@ -272,7 +407,7 @@ export const appRouter = router({
     updateRevenueShare: adminProcedure.input(z.object({ commissionBps: z.number().int().min(0).max(10000) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database is not configured");
-      await db.insert(platformSettings).values({ settingKey: "platform_commission_bps", numericValue: input.commissionBps, updatedBy: ctx.user.id }).onDuplicateKeyUpdate({ set: { numericValue: input.commissionBps, updatedBy: ctx.user.id } });
+      await db.insert(platformSettings).values({ settingKey: "platform_commission_bps", numericValue: input.commissionBps, updatedBy: ctx.user.id }).onConflictDoUpdate({ target: platformSettings.settingKey, set: { numericValue: input.commissionBps, updatedBy: ctx.user.id } });
       await db.update(pricingRules).set({ commissionBps: input.commissionBps }).where(eq(pricingRules.active, true));
       await db.insert(auditLogs).values({ actorUserId: ctx.user.id, action: "revenue_share_updated", entityType: "platform_settings", entityId: "platform_commission_bps", metadata: JSON.stringify({ commissionBps: input.commissionBps }) });
       return { success: true, commissionBps: input.commissionBps } as const;

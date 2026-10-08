@@ -61,8 +61,8 @@ export async function createReservedAccount({ userId, bvn, nin }: { userId: numb
   const response = await monnifyFetch<ReservedAccountResponse>("/api/v2/bank-transfer/reserved-accounts", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ accountReference, accountName: user.name || `Kkary rider ${userId}`, currencyCode: DEFAULT_CURRENCY, contractCode: settings.contractCode, customerEmail: user.email || `rider-${userId}@kkary.app`, customerName: user.name || `Kkary rider ${userId}`, customerBvn: bvn, customerNin: nin, getAllAvailableBanks: true }) });
   const account = response.accounts?.[0] ?? response;
   if (!account.accountNumber || !account.accountName || !account.bankName) throw new Error("Monnify returned incomplete reserved account details");
-  const inserted = await db.insert(walletAccounts).values({ walletId: wallet.id, customerReference: accountReference, accountNumber: account.accountNumber, accountName: account.accountName, bankName: account.bankName, status: "active" });
-  return { id: Number(inserted[0].insertId), walletId: wallet.id, provider: "monnify", customerReference: accountReference, accountNumber: account.accountNumber, accountName: account.accountName, bankName: account.bankName, status: "active" as const };
+  const [inserted] = await db.insert(walletAccounts).values({ walletId: wallet.id, customerReference: accountReference, accountNumber: account.accountNumber, accountName: account.accountName, bankName: account.bankName, status: "active" }).returning({ id: walletAccounts.id });
+  return { id: inserted.id, walletId: wallet.id, provider: "monnify", customerReference: accountReference, accountNumber: account.accountNumber, accountName: account.accountName, bankName: account.bankName, status: "active" as const };
 }
 
 export async function verifyMonnifyPayment(paymentReference: string) {
@@ -120,8 +120,8 @@ export async function processMonnifyWebhook(rawBody: string, signature: string |
   if (walletDuplicate[0]) return { duplicate: true, walletTransactionId: walletDuplicate[0].id } as const;
   const amountKobo = Math.round(amountPaid * 100);
   const walletReference = `MONNIFY-CREDIT-${transactionReference}`;
-  const ledger = await db.insert(walletTransactions).values({ walletId: riderWallet.id, type: "credit", amountKobo, currency: DEFAULT_CURRENCY, reference: walletReference, status: "completed", description: wallet ? "Monnify dedicated account funding" : "Monnify hosted wallet funding", metadata: rawBody, provider: "monnify", providerReference: transactionReference });
-  const paymentId = existing[0] ? existing[0].id : Number((await db.insert(payments).values({ provider: "monnify", providerReference: transactionReference, amountKobo, status: "successful", idempotencyKey: paymentReference || `Kkary-RESERVED-${transactionReference}`, walletTransactionId: Number(ledger[0].insertId), rawReference: rawBody }))[0].insertId);
-  if (existing[0]) await db.update(payments).set({ amountKobo, status: "successful", walletTransactionId: Number(ledger[0].insertId), rawReference: rawBody }).where(eq(payments.id, existing[0].id));
+  const [ledger] = await db.insert(walletTransactions).values({ walletId: riderWallet.id, type: "credit", amountKobo, currency: DEFAULT_CURRENCY, reference: walletReference, status: "completed", description: wallet ? "Monnify dedicated account funding" : "Monnify hosted wallet funding", metadata: rawBody, provider: "monnify", providerReference: transactionReference }).returning({ id: walletTransactions.id });
+  const paymentId = existing[0] ? existing[0].id : (await db.insert(payments).values({ provider: "monnify", providerReference: transactionReference, amountKobo, status: "successful", idempotencyKey: paymentReference || `Kkary-RESERVED-${transactionReference}`, walletTransactionId: ledger.id, rawReference: rawBody }).returning({ id: payments.id }))[0].id;
+  if (existing[0]) await db.update(payments).set({ amountKobo, status: "successful", walletTransactionId: ledger.id, rawReference: rawBody }).where(eq(payments.id, existing[0].id));
   return { processed: true, paymentId, amountKobo, fundingMethod: wallet ? "reserved_account" as const : "hosted_checkout" as const };
 }

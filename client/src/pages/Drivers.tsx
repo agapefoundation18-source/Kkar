@@ -2,6 +2,14 @@ import { ArrowRight, BadgeCheck, Bike, Check, Download, FileCheck2, MapPin, Shie
 import { useState } from "react";
 import { DriversGuide } from "@/components/DriversGuide";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
+import { getAppStoreUrls } from "@/lib/appDownloads";
+
+const { android: androidInstaller, ios: iosInstaller } = getAppStoreUrls("driver");
+
+function InstallerButton({ platform, href }: { platform: string; href: string }) {
+  const storeName = platform === "Android" ? "Google Play" : "App Store";
+  return <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-4 py-3 text-sm font-bold text-white hover:bg-white/10"><Download className="h-4 w-4" /> {storeName}</a>;
+}
 
 function Logo() {
   return <a href="/" className="flex items-center gap-2.5"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#f4b942] text-[#102a2c] shadow-[0_8px_24px_rgba(244,185,66,0.28)]"><Zap className="h-5 w-5 fill-current" strokeWidth={2.5} /></div><div><div className="text-[18px] font-black tracking-[-0.07em] text-white">Kkary</div><div className="-mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#9fcfc2]">For drivers</div></div></a>;

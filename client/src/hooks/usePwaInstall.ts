@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getAppDownloadUrl } from "@/lib/appDownloads";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -15,20 +16,14 @@ export function usePwaInstall() {
   const [canInstall, setCanInstall] = useState(false);
 
   useEffect(() => {
-    // Check if app is already installed
-    if (window.matchMedia("(display-mode: standalone)").matches) {
-      setIsInstalled(true);
-      return;
-    }
+    const isAdmin = window.location.pathname.startsWith("/admin");
+    if (!isAdmin) setCanInstall(true);
 
-    // Listen for beforeinstallprompt event
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredPrompt(event as BeforeInstallPromptEvent);
       setCanInstall(true);
     };
-
-    // Listen for app installed event
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setCanInstall(false);
@@ -45,21 +40,17 @@ export function usePwaInstall() {
   }, []);
 
   const installApp = async () => {
-    if (!deferredPrompt) return;
+    if (window.location.pathname.startsWith("/admin")) {
+      if (!deferredPrompt) return;
 
-    try {
       deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-
-      if (outcome === "accepted") {
-        setIsInstalled(true);
-        setCanInstall(false);
-      }
-
+      await deferredPrompt.userChoice;
       setDeferredPrompt(null);
-    } catch (error) {
-      console.error("Installation failed:", error);
+      return;
     }
+
+    const kind = window.location.pathname.startsWith("/drivers") ? "driver" : "rider";
+    window.open(getAppDownloadUrl(kind), "_blank", "noopener,noreferrer");
   };
 
   return {
