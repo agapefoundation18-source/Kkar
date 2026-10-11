@@ -25,6 +25,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { MapView } from "@/components/Map";
+import { AppUpdateCard } from "@/components/AppUpdateCard";
 import { supabase } from "@/lib/supabase";
 
 type AccountPage = "account" | "profile" | "saved-places" | "settings" | "security" | "language" | "privacy" | "earn";
@@ -924,14 +925,17 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
       )}
 
       {page === "settings" && (
-        <SectionCard>
-          <div className="divide-y divide-[#edf3f1]">
-            <ListItem icon={ShieldCheck} title="Sign in & security" detail="Passkeys and account password" onClick={() => goTo("security")} />
-            <ListItem icon={Globe2} title="Language" detail="English" onClick={() => goTo("language")} />
-            <ListItem icon={LockKeyhole} title="Privacy" detail="Privacy information and account deletion" onClick={() => goTo("privacy")} />
-          </div>
-          <button onClick={() => { clearFeedback(); setLogoutOpen(true); }} className="mt-3 w-full rounded-2xl border border-[#eed7d3] px-4 py-3 text-sm font-black text-[#a7473d]">Log out</button>
-        </SectionCard>
+        <div className="space-y-4">
+          <AppUpdateCard />
+          <SectionCard>
+            <div className="divide-y divide-[#edf3f1]">
+              <ListItem icon={ShieldCheck} title="Sign in & security" detail="Passkeys and account password" onClick={() => goTo("security")} />
+              <ListItem icon={Globe2} title="Language" detail="English" onClick={() => goTo("language")} />
+              <ListItem icon={LockKeyhole} title="Privacy" detail="Privacy information and account deletion" onClick={() => goTo("privacy")} />
+            </div>
+            <button onClick={() => { clearFeedback(); setLogoutOpen(true); }} className="mt-3 w-full rounded-2xl border border-[#eed7d3] px-4 py-3 text-sm font-black text-[#a7473d]">Log out</button>
+          </SectionCard>
+        </div>
       )}
 
       {page === "security" && (

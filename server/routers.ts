@@ -1,7 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import crypto from "node:crypto";
 import { parse } from "cookie";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -15,6 +15,7 @@ import { ADMIN_COOKIE, ADMIN_COOKIE_OPTIONS, hashPassword, issueAdminToken, veri
 import { calculateDriverSplit } from "./fare";
 import { allowedTransitions } from "./rideState";
 import { detectLgaFromCoordinates, getLgas, isValidLga } from "./_core/lga";
+import { compareSemanticVersions, parseSemanticVersion } from "@shared/appRelease";
 
 const vehicleType = z.enum(["bike", "car"]);
 const rideStatus = z.enum(["requested", "matching", "driver_assigned", "driver_en_route", "driver_arrived", "trip_started", "trip_completed", "payment_processing", "completed", "cancelled_by_rider", "cancelled_by_driver", "cancelled_no_driver", "payment_failed"]);
@@ -25,6 +26,166 @@ const draftPricing: Record<"bike" | "car", Pricing> = {
   bike: { baseFareKobo: 40000, perKmKobo: 18000, minimumFareKobo: 70000, commissionBps: 2000 },
   car: { baseFareKobo: 80000, perKmKobo: 30000, minimumFareKobo: 150000, commissionBps: 2000 },
 };
+
+const appReleaseSettingKey = "app_release";
+const launchModeSettingKey = "launch_mode";
+const launchWaitlistKeyPrefix = "launch_waitlist:";
+
+type LaunchMode = {
+  enabled: boolean;
+  launchAt: string | null;
+};
+
+const defaultLaunchMode: LaunchMode = { enabled: false, launchAt: null };
+
+async function getLaunchMode(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
+  const [setting] = await db.select({ textValue: platformSettings.textValue })
+    .from(platformSettings)
+    .where(eq(platformSettings.settingKey, launchModeSettingKey))
+    .limit(1);
+  if (!setting?.textValue) return defaultLaunchMode;
+
+  let value: unknown;
+  try {
+    value = JSON.parse(setting.textValue);
+  } catch {
+    throw new Error("The launch page setting is malformed.");
+  }
+  const result = z.object({
+    enabled: z.boolean(),
+    launchAt: z.string().datetime().nullable(),
+  }).safeParse(value);
+  if (!result.success) throw new Error("The launch page setting is invalid.");
+  return result.data;
+}
+
+type SupabaseDriverApplication = {
+  id: string;
+  profile_id: string;
+  vehicle_type: "bike" | "car";
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  vehicle_color: string | null;
+  plate_number: string | null;
+  created_at: string;
+  profiles: { full_name: string; email: string | null } | null;
+};
+
+async function supabaseAdminRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const url = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").replace(/\/+$/, "");
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  if (!url || !serviceRoleKey) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Supabase driver review is not configured on the server.",
+    });
+  }
+
+  const response = await fetch(`${url}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+      ...init.headers,
+    },
+  });
+  if (!response.ok) {
+    console.error(`[Supabase driver review] Request failed with status ${response.status}`);
+    throw new TRPCError({
+      code: "BAD_GATEWAY",
+      message: `Supabase driver review failed (${response.status}).`,
+    });
+  }
+  return response.json() as Promise<T>;
+}
+
+type AppRelease = {
+  version: string;
+  buildId: string;
+  notes: string;
+  releaseId: string;
+  publishedAt: string;
+  promptForUpdate: boolean;
+};
+
+async function getAppRelease(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
+  const [setting] = await db.select({ textValue: platformSettings.textValue })
+    .from(platformSettings)
+    .where(eq(platformSettings.settingKey, appReleaseSettingKey))
+    .limit(1);
+  if (!setting?.textValue) return null;
+
+  let value: unknown;
+  try {
+    value = JSON.parse(setting.textValue);
+  } catch {
+    throw new Error("The published app release setting is malformed.");
+  }
+  const releaseSchema = z.object({
+    version: z.string(),
+    buildId: z.string(),
+    notes: z.string(),
+    releaseId: z.string(),
+    publishedAt: z.string(),
+    promptForUpdate: z.boolean().default(true),
+  });
+  const result = releaseSchema.safeParse(value);
+  if (!result.success) throw new Error("The published app release setting is invalid.");
+  return result.data;
+}
+
+function currentBuildId() {
+  return process.env.VERCEL_DEPLOYMENT_ID ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.GITHUB_SHA;
+}
+
+function configuredVercelDeployHook() {
+  const configured = process.env.VERCEL_DEPLOY_HOOK_URL;
+  if (!configured) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Configure the Vercel deploy hook before publishing this deployment.",
+    });
+  }
+  let url: URL;
+  try {
+    url = new URL(configured);
+  } catch {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The Vercel deploy hook is invalid." });
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== "api.vercel.com" ||
+    !url.pathname.startsWith("/v1/integrations/deploy/") ||
+    url.username ||
+    url.password
+  ) {
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The Vercel deploy hook is invalid." });
+  }
+  return url;
+}
+
+async function saveAppRelease(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  release: AppRelease,
+  updatedBy: number,
+) {
+  await db.insert(platformSettings).values({
+    settingKey: appReleaseSettingKey,
+    textValue: JSON.stringify(release),
+    updatedBy,
+  }).onConflictDoUpdate({
+    target: platformSettings.settingKey,
+    set: {
+      textValue: JSON.stringify(release),
+      updatedBy,
+      updatedAt: new Date(),
+    },
+  });
+}
 
 async function resolvePricing(type: "bike" | "car"): Promise<Pricing> {
   const rules = await getActivePricingRules();
@@ -124,6 +285,31 @@ export const appRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database is not configured");
       await db.update(users).set({ passwordHash: hashPassword(input.newPassword), mustChangePassword: false }).where(eq(users.id, ctx.user.id));
+      return { success: true } as const;
+    }),
+    completeInitialSetup: protectedProcedure.input(z.object({
+      currentPassword: z.string().min(1).max(128),
+      username: z.string().trim().min(3).max(64).regex(/^[a-zA-Z0-9_.-]+$/, "Use letters, numbers, dots, underscores, or hyphens for the username."),
+      newPassword: z.string().min(10).max(128),
+    })).mutation(async ({ ctx, input }) => {
+      if (!["admin", "super_admin", "customer_care"].includes(ctx.user.role) || !ctx.user.mustChangePassword || !ctx.user.passwordHash) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Initial administrator setup is not required for this account." });
+      }
+      if (!verifyPassword(input.currentPassword, ctx.user.passwordHash)) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Current password is incorrect." });
+      }
+      const existing = await getUserByUsername(input.username);
+      if (existing && existing.id !== ctx.user.id) {
+        throw new TRPCError({ code: "CONFLICT", message: "That username is already in use." });
+      }
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      await db.update(users).set({
+        username: input.username,
+        passwordHash: hashPassword(input.newPassword),
+        mustChangePassword: false,
+      }).where(eq(users.id, ctx.user.id));
+      ctx.res.clearCookie(ADMIN_COOKIE, { ...ADMIN_COOKIE_OPTIONS, maxAge: 0 });
       return { success: true } as const;
     }),
     createUser: superAdminProcedure.input(z.object({ username: z.string().min(3).max(64), name: z.string().min(2).max(120), email: z.string().email().optional(), role: z.enum(["admin", "super_admin"]), password: z.string().min(10).max(128) })).mutation(async ({ ctx, input }) => {
@@ -382,6 +568,143 @@ export const appRouter = router({
   }),
 
   operations: router({
+    launchStatus: publicProcedure.query(async () => {
+      const db = await getDb();
+      return db ? getLaunchMode(db) : defaultLaunchMode;
+    }),
+    joinLaunchWaitlist: publicProcedure.input(z.object({
+      email: z.string().trim().email().max(320).transform(value => value.toLowerCase()),
+    })).mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "The waitlist is temporarily unavailable. Please try again later." });
+      const digest = crypto.createHash("sha256").update(input.email).digest("hex");
+      const settingKey = `${launchWaitlistKeyPrefix}${digest}`;
+      await db.insert(platformSettings).values({
+        settingKey,
+        textValue: input.email,
+        updatedBy: null,
+      }).onConflictDoUpdate({
+        target: platformSettings.settingKey,
+        set: { textValue: input.email, updatedBy: null, updatedAt: new Date() },
+      });
+      return { success: true } as const;
+    }),
+    saveLaunchMode: adminProcedure.input(z.object({
+      enabled: z.boolean(),
+      launchAt: z.string().datetime().nullable(),
+    }).refine(value => !value.enabled || value.launchAt !== null, {
+      message: "Choose a launch date and time before enabling the coming soon page.",
+      path: ["launchAt"],
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const config: LaunchMode = input;
+      await db.insert(platformSettings).values({
+        settingKey: launchModeSettingKey,
+        textValue: JSON.stringify(config),
+        updatedBy: ctx.user.id,
+      }).onConflictDoUpdate({
+        target: platformSettings.settingKey,
+        set: { textValue: JSON.stringify(config), updatedBy: ctx.user.id, updatedAt: new Date() },
+      });
+      await db.insert(auditLogs).values({
+        actorUserId: ctx.user.id,
+        action: "launch_mode_updated",
+        entityType: "platform_setting",
+        entityId: launchModeSettingKey,
+        metadata: JSON.stringify(config),
+      });
+      return config;
+    }),
+    launchWaitlist: adminProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const entries = await db.select({
+        email: platformSettings.textValue,
+        joinedAt: platformSettings.updatedAt,
+      }).from(platformSettings)
+        .where(like(platformSettings.settingKey, `${launchWaitlistKeyPrefix}%`))
+        .orderBy(desc(platformSettings.updatedAt));
+      return entries.flatMap(entry => entry.email ? [{ email: entry.email, joinedAt: entry.joinedAt }] : []);
+    }),
+    appRelease: publicProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return null;
+      return getAppRelease(db);
+    }),
+    releaseStatus: adminProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      return {
+        release: await getAppRelease(db),
+        deployHookConfigured: Boolean(process.env.VERCEL_DEPLOY_HOOK_URL),
+      };
+    }),
+    publishAppVersion: adminProcedure
+      .input(z.object({
+        version: z.string().min(1).max(64).refine(value => parseSemanticVersion(value) !== null, "Enter a semantic version such as 1.2.3."),
+        notes: z.string().trim().max(2000).default(""),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database is not configured");
+        const buildId = currentBuildId();
+        if (!buildId) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "A deployment build ID is unavailable. Publish this version from the deployed admin console.",
+          });
+        }
+        const previous = await getAppRelease(db);
+        if (previous && compareSemanticVersions(input.version, previous.version) <= 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Version ${input.version} must be newer than ${previous.version}.`,
+          });
+        }
+        const release: AppRelease = {
+          version: input.version,
+          buildId,
+          notes: input.notes,
+          releaseId: crypto.randomUUID(),
+          publishedAt: new Date().toISOString(),
+          promptForUpdate: true,
+        };
+        await saveAppRelease(db, release, ctx.user.id);
+        await db.insert(auditLogs).values({
+          actorUserId: ctx.user.id,
+          action: "app_version_published",
+          entityType: "app_release",
+          entityId: release.releaseId,
+          metadata: JSON.stringify({ version: release.version, buildId: release.buildId }),
+        });
+        return release;
+      }),
+    publishCurrentDeployment: adminProcedure.mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const hookUrl = configuredVercelDeployHook();
+      const response = await fetch(hookUrl, { method: "POST", signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) {
+        throw new TRPCError({
+          code: "BAD_GATEWAY",
+          message: "Vercel did not accept the deployment request.",
+        });
+      }
+      const previous = await getAppRelease(db);
+      if (previous) {
+        const release = { ...previous, promptForUpdate: false };
+        await saveAppRelease(db, release, ctx.user.id);
+      }
+      await db.insert(auditLogs).values({
+        actorUserId: ctx.user.id,
+        action: "app_deployment_published",
+        entityType: "app_release",
+        entityId: previous?.releaseId ?? "unversioned",
+        metadata: JSON.stringify({ version: previous?.version ?? null }),
+      });
+      return { success: true } as const;
+    }),
     snapshot: adminProcedure.query(async () => getOperationsSnapshot()),
     liveDrivers: adminProcedure.query(async () => {
       const db = await getDb();
@@ -438,6 +761,35 @@ export const appRouter = router({
       if (!db) return [];
       return db.select().from(drivers).where(eq(drivers.status, "pending")).limit(20);
     }),
+    supabaseDriverApplications: adminProcedure.query(async () => {
+      const rows = await supabaseAdminRequest<SupabaseDriverApplication[]>(
+        "driver_profiles?select=id,profile_id,vehicle_type,vehicle_make,vehicle_model,vehicle_color,plate_number,created_at,profiles(full_name,email)&is_approved=eq.false&order=created_at.asc",
+      );
+      return rows;
+    }),
+    approveSupabaseDriver: adminProcedure
+      .input(z.object({ driverId: z.string().uuid() }))
+      .mutation(async ({ ctx, input }) => {
+        const rows = await supabaseAdminRequest<Array<{ id: string }>>(
+          `driver_profiles?id=eq.${encodeURIComponent(input.driverId)}&is_approved=eq.false`,
+          { method: "PATCH", body: JSON.stringify({ is_approved: true }) },
+        );
+        if (rows.length !== 1) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This driver application was already reviewed or no longer exists.",
+          });
+        }
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The admin audit database is unavailable." });
+        await db.insert(auditLogs).values({
+          actorUserId: ctx.user.id,
+          action: "supabase_driver_approved",
+          entityType: "supabase_driver",
+          entityId: input.driverId,
+        });
+        return { success: true } as const;
+      }),
     driverDocuments: adminProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];

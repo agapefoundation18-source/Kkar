@@ -6,25 +6,37 @@
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-    <title>Kkary — local mobility</title>
+    <title>Kkary Rider — local mobility</title>
     <meta name="theme-color" content="#113a3b" />
     <meta name="description" content="Kkary — trusted mobility for everyday journeys." />
+    <link id="kkary-apple-icon" rel="apple-touch-icon" href="/icons/rider-192.png" />
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/manifest.json" />
-    
+    <script>
+      const isDriverApp = window.location.pathname === "/drivers" || window.location.pathname.startsWith("/drivers/");
+      document.write(`<link id="kkary-manifest" rel="manifest" href="${isDriverApp ? "/manifest-driver.json" : "/manifest.json"}">`);
+    </script>
     <!-- PWA Metadata -->
-    <meta name="application-name" content="Kkary" />
+    <meta name="application-name" content="Kkary Rider" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Kkary" />
+    <meta name="apple-mobile-web-app-title" content="Kkary Rider" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="msapplication-config" content="/browserconfig.xml" />
     <meta name="msapplication-TileColor" content="#113a3b" />
-    
-    <!-- Apple Touch Icons -->
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%23f4b942' width='180' height='180'/><path fill='%23113a3b' d='M90 45c22.1 0 40 17.9 40 40s-17.9 40-40 40-40-17.9-40-40 17.9-40 40-40zm0 13c-14.9 0-27 12.1-27 27s12.1 27 27 27 27-12.1 27-27-12.1-27-27-27zm0 20c3.9 0 7 3.1 7 7s-3.1 7-7 7-7-3.1-7-7 3.1-7 7-7z'/></svg>" />
-    
+    <script>
+      if (isDriverApp) {
+        document.title = "Kkary Driver — local mobility";
+        document.querySelector('meta[name="application-name"]').content = "Kkary Driver";
+        document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Kkary Driver";
+        document.getElementById("kkary-apple-icon").href = "/icons/driver-192.png";
+      } else {
+        document.querySelector('meta[name="application-name"]').content = "Kkary Rider";
+        document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Kkary Rider";
+        document.getElementById("kkary-apple-icon").href = "/icons/rider-192.png";
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

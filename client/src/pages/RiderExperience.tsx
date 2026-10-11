@@ -28,57 +28,21 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
-import { getAppDownloadUrl, type AppKind } from "@/lib/appDownloads";
 import { normalizeE164PhoneNumber } from "@/lib/phoneAuth";
 import { hasSupabaseConfig, supabase } from "@/lib/supabase";
 import RiderAccount from "@/pages/RiderAccount";
+import { RiderActivity, type RideHistoryItem } from "@/components/ride/RiderActivity";
+import { RiderBooking } from "@/components/ride/RiderBooking";
 
 type AuthMode = "signup" | "signin";
 type ActivityTab = "home" | "activity" | "account";
 
-type RideSample = {
-  id: string;
-  status: string;
-  pickup: string;
-  dropoff: string;
-  date: string;
-  time: string;
-  price: string;
-  vehicle: string;
+const rideWhen = (createdAt: string) => {
+  const date = new Date(createdAt);
+  return Number.isNaN(date.getTime())
+    ? "Date unavailable"
+    : new Intl.DateTimeFormat("en-NG", { dateStyle: "medium", timeStyle: "short" }).format(date);
 };
-
-const rideSamples: RideSample[] = [
-  {
-    id: "ride-104",
-    status: "Completed",
-    pickup: "Uyo Main Park",
-    dropoff: "Four Points by Sheraton, Uyo",
-    date: "Today",
-    time: "7:42 PM",
-    price: "₦6,800",
-    vehicle: "Kkary Bike",
-  },
-  {
-    id: "ride-95",
-    status: "In progress",
-    pickup: "Nwaniba Road",
-    dropoff: "Ewet Housing Estate",
-    date: "Yesterday",
-    time: "6:10 PM",
-    price: "₦4,600",
-    vehicle: "Kkary Car",
-  },
-  {
-    id: "ride-86",
-    status: "Completed",
-    pickup: "Ikot Ekpene Road",
-    dropoff: "Mbierebe Road",
-    date: "Monday",
-    time: "9:25 AM",
-    price: "₦3,400",
-    vehicle: "Kkary Bike",
-  },
-];
 
 const onboardingSlides = [
   {
@@ -130,24 +94,6 @@ function Logo() {
   );
 }
 
-function AppDownloadButton({ kind, compact = false }: { kind: AppKind; compact?: boolean }) {
-  return (
-    <a
-      href={getAppDownloadUrl(kind)}
-      target="_blank"
-      rel="noreferrer"
-      className={`group flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 text-white transition-all hover:-translate-y-0.5 hover:bg-white/15 ${compact ? "px-3 py-2" : "px-4 py-3"}`}
-    >
-      <Download className="h-4 w-4 text-[#f4c24d]" />
-      <span className="text-left">
-        <span className="block text-[9px] font-semibold uppercase tracking-[0.12em] text-[#b1d7ce]">Download</span>
-        <span className="block text-sm font-extrabold">Kkary {kind === "driver" ? "Driver" : "Rider"}</span>
-      </span>
-      <ArrowRight className="ml-1 h-4 w-4 text-[#79b5a5] transition-transform group-hover:translate-x-0.5" />
-    </a>
-  );
-}
-
 function AppCard({ kind }: { kind: "rider" | "driver" }) {
   const rider = kind === "rider";
   return (
@@ -178,31 +124,8 @@ function AppCard({ kind }: { kind: "rider" | "driver" }) {
             </div>
           ))}
         </div>
-        <div className="mt-7">
-          <AppDownloadButton kind={kind} compact />
-        </div>
       </div>
     </div>
-  );
-}
-
-function StoreButton({ platform, href }: { platform: "android" | "ios"; href: string }) {
-  const isAndroid = platform === "android";
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-left text-white shadow-[0_14px_30px_rgba(0,0,0,0.15)] backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white/15"
-    >
-      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-[#f4b942]">
-        <Smartphone className="h-5 w-5" />
-      </div>
-      <span>
-        <span className="block text-[9px] font-semibold uppercase tracking-[0.14em] text-[#b5d7d1]">Get it on</span>
-        <span className="block text-base font-black">{isAndroid ? "Android" : "iPhone"}</span>
-      </span>
-    </a>
   );
 }
 
@@ -295,6 +218,16 @@ function AuthExperience({
     confirmPassword: "",
   });
 
+  useEffect(() => {
+    if (authMode !== "signup" || locationState !== "unknown" || !navigator.permissions) return;
+    void navigator.permissions.query({ name: "geolocation" })
+      .then(permission => {
+        if (permission.state === "granted") setLocationState("granted");
+        else if (permission.state === "denied") setLocationState("denied");
+      })
+      .catch(() => {});
+  }, [authMode, locationState]);
+
   const updateForm = (key: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
     if (key === "phone") {
@@ -323,70 +256,51 @@ function AuthExperience({
     );
   };
 
-  const handlePhoneVerify = async () => {
-    setError(null);
-    setMessage(null);
+  const resendPhoneCode = async () => {
     const phone = normalizeE164PhoneNumber(form.phone);
     if (!phone) {
-      setError("Enter a valid phone number in international format, such as +2348000000000.");
+      setError("Enter a valid phone number before requesting another code.");
       return;
     }
-
-    if (!form.name.trim() || !form.email.trim() || !form.password || !form.confirmPassword) {
-      setError("Complete your name, email, and password before requesting a verification code.");
-      return;
-    }
-    if (form.password.length < 8 || form.password !== form.confirmPassword) {
-      setError("Use a password of at least 8 characters and make sure both password fields match.");
-      return;
-    }
-
-    if (!hasSupabaseConfig) {
-      setError("Phone verification is not configured in this environment.");
-      return;
-    }
-
     setSubmitting(true);
+    setError(null);
     try {
-      if (!phoneOtpSent) {
-        const { error: signUpError } = await supabase.auth.signUp({
-          phone,
-          password: form.password,
-          options: {
-            data: {
-              full_name: form.name,
-              email: form.email.trim(),
-              phone,
-              user_type: "rider",
-            },
-          },
-        });
-        if (signUpError) throw signUpError;
-        setPhoneOtpSent(true);
-        setMessage("We sent a verification code by SMS. Enter it below to verify your phone.");
-        return;
-      }
-
-      if (!/^\d{6}$/.test(phoneOtp.trim())) {
-        setError("Enter the 6-digit verification code sent to your phone.");
-        return;
-      }
-
-      onSignupVerificationPending(true);
-      try {
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          phone,
-          token: phoneOtp.trim(),
-          type: "sms",
-        });
-        if (verifyError) throw verifyError;
-        setIsPhoneVerified(true);
-        setMessage("Phone number verified. Create your account to continue.");
-      } catch (cause) {
-        onSignupVerificationPending(false);
-        throw cause;
-      }
+      const { error: resendError } = await supabase.auth.resend({ type: "sms", phone });
+      if (resendError) throw resendError;
+      setPhoneOtp("");
+      setMessage(`A new verification code was sent to ${phone}.`);
     } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to resend the verification code.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const verifyPhoneCode = async (code: string) => {
+    if (!/^\d{6}$/.test(code)) return;
+    const phone = normalizeE164PhoneNumber(form.phone);
+    if (!phone) {
+      setError("Enter a valid phone number.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    setMessage(null);
+    onSignupVerificationPending(true);
+    let phoneVerified = false;
+    try {
+      const { error: verifyError } = await supabase.auth.verifyOtp({ phone, token: code, type: "sms" });
+      if (verifyError) throw verifyError;
+      phoneVerified = true;
+      setIsPhoneVerified(true);
+      const { error: profileError } = await supabase.auth.updateUser({
+        email: form.email.trim(),
+        data: { full_name: form.name.trim(), phone, user_type: "rider" },
+      });
+      if (profileError) throw profileError;
+      onAuthenticated();
+    } catch (cause) {
+      if (!phoneVerified) onSignupVerificationPending(false);
       setError(cause instanceof Error ? cause.message : "Phone verification failed.");
     } finally {
       setSubmitting(false);
@@ -396,86 +310,136 @@ function AuthExperience({
   const handleSubmit = async () => {
     setError(null);
     setMessage(null);
+    const phone = form.phone.trim() ? normalizeE164PhoneNumber(form.phone) : null;
+    if (authMode === "signup" && form.phone.trim() && !phone) {
+      setError("Enter a valid phone number in international format, such as +2348000000000.");
+      return;
+    }
+    if (authMode === "signup" && (!form.name.trim() || !form.email.trim() || !form.password || !form.confirmPassword)) {
+      setError("Complete all sign-up fields before creating your account.");
+      return;
+    }
+    if (authMode === "signup" && (form.password.length < 8 || form.password !== form.confirmPassword)) {
+      setError("Use a password of at least 8 characters and make sure both password fields match.");
+      return;
+    }
     if (!hasSupabaseConfig) {
       setError("Kkar sign-in is not configured in this environment. Add the Supabase project URL and anon key to .env.local.");
       return;
     }
-
-    if (authMode === "signup") {
-      if (!form.name.trim() || !form.email.trim() || !form.phone.trim() || !form.password || !form.confirmPassword) {
-        setError("Complete all sign-up fields before continuing.");
-        return;
-      }
-
-      if (form.password.length < 8) {
-        setError("Password must be at least 8 characters long.");
-        return;
-      }
-
-      if (form.password !== form.confirmPassword) {
-        setError("Passwords do not match.");
-        return;
-      }
-
-      if (!isPhoneVerified) {
-        setError("Request and verify the SMS code before creating your account.");
-        return;
-      }
-    } else {
-      const identifier = form.email.trim() || form.phone.trim();
-      if (!identifier || !form.password.trim()) {
-        setError("Enter your email or phone number and password to sign in.");
-        return;
-      }
-    }
-
-    if (locationState !== "granted") {
+    if (authMode === "signup" && locationState !== "granted") {
       setError("Enable device location permission to continue.");
       return;
     }
-
     setSubmitting(true);
-
     try {
+      if (authMode === "signup" && !phoneOtpSent && phone) {
+        const { error: signUpError } = await supabase.auth.signUp({
+          phone,
+          password: form.password,
+          options: {
+            data: {
+              full_name: form.name.trim(),
+              email: form.email.trim(),
+              phone,
+              user_type: "rider",
+            },
+          },
+        });
+        if (signUpError) throw signUpError;
+        setPhoneOtp("");
+        setPhoneOtpSent(true);
+        setMessage(`We sent a verification code to ${phone}.`);
+        return;
+      }
+      if (authMode === "signup" && !phone) {
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: form.email.trim(),
+          password: form.password,
+          options: {
+            data: { full_name: form.name.trim(), phone: null, user_type: "rider" },
+          },
+        });
+        if (signUpError) throw signUpError;
+        if (!data.session) {
+          setMessage("Account created. Email confirmation is enabled for this Supabase project; disable it to enter without verification.");
+          return;
+        }
+        onAuthenticated();
+        return;
+      }
       if (authMode === "signup") {
-        const phone = normalizeE164PhoneNumber(form.phone);
-        if (!phone) {
-          setError("Enter a valid phone number in international format.");
+        if (!isPhoneVerified) {
+          setError("Enter the SMS verification code to continue.");
           return;
         }
         const { error: updateError } = await supabase.auth.updateUser({
           email: form.email.trim(),
           data: { full_name: form.name.trim(), phone, user_type: "rider" },
         });
-
         if (updateError) throw updateError;
-        setMessage("Your phone is verified. Check your email to enable email sign-in; you can sign in with your phone and password now.");
-      } else {
-        const identifier = form.email.trim() || form.phone.trim();
-        const isEmail = identifier.includes("@");
-        const phone = isEmail ? null : normalizeE164PhoneNumber(identifier);
-        if (!isEmail && !phone) {
-          setError("Enter a valid phone number in international format.");
-          return;
-        }
-        const credentials = isEmail
-          ? { email: identifier, password: form.password }
-          : { phone: phone!, password: form.password };
-        const { error: signInError } = await supabase.auth.signInWithPassword(credentials);
-
-        if (signInError) {
-          setError(signInError.message);
-          return;
-        }
+        onAuthenticated();
+        return;
       }
-
+      const identifier = form.email.trim() || form.phone.trim();
+      if (!identifier || !form.password.trim()) {
+        setError("Enter your email or phone number and password to sign in.");
+        return;
+      }
+      const isEmail = identifier.includes("@");
+      const signInPhone = isEmail ? null : normalizeE164PhoneNumber(identifier);
+      if (!isEmail && !signInPhone) {
+        setError("Enter a valid phone number in international format.");
+        return;
+      }
+      const credentials = isEmail
+        ? { email: identifier, password: form.password }
+        : { phone: signInPhone!, password: form.password };
+      const { error: signInError } = await supabase.auth.signInWithPassword(credentials);
+      if (signInError) throw signInError;
       onAuthenticated();
-    } catch (exception) {
-      setError(exception instanceof Error ? exception.message : "Authentication failed.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Authentication failed.");
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (authMode === "signup" && phoneOtpSent && !isPhoneVerified) {
+    const phone = normalizeE164PhoneNumber(form.phone) ?? form.phone;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0d2d30] px-4 py-8 text-white">
+        <div className="w-full max-w-md rounded-[30px] border border-white/10 bg-[#13393c] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.3)]">
+          <h1 className="text-2xl font-black">Verify your phone number</h1>
+          <p className="mt-3 text-sm leading-relaxed text-[#bdd8d3]">We sent a verification code to <strong className="text-white">{phone}</strong>.</p>
+          <input
+            autoFocus
+            value={phoneOtp}
+            onChange={event => {
+              const code = event.target.value.replace(/\D/g, "").slice(0, 6);
+              setPhoneOtp(code);
+              if (code.length === 6 && !submitting) void verifyPhoneCode(code);
+            }}
+            className="mt-6 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-center text-2xl tracking-[0.5em] text-white outline-none"
+            placeholder="••••••"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            aria-label="6-digit verification code"
+          />
+          {submitting && <p className="mt-3 text-center text-sm text-[#bdd8d3]">Verifying code…</p>}
+          {error && <p role="alert" className="mt-3 rounded-xl border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">{error}</p>}
+          {message && <p className="mt-3 text-sm text-[#a9f0d5]">{message}</p>}
+          <button onClick={() => void resendPhoneCode()} disabled={submitting} className="mt-5 w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+            Resend verification code
+          </button>
+          <button onClick={() => { setPhoneOtpSent(false); setPhoneOtp(""); setError(null); setMessage(null); }} className="mt-3 w-full text-sm text-[#bdd8d3]">
+            Change phone number
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0d2d30] px-4 py-8 text-white">
@@ -513,7 +477,7 @@ function AuthExperience({
           </button>
         </div>
 
-        <div className="mb-5 rounded-2xl bg-[#1b4749] p-4">
+        {authMode === "signup" && <div className="mb-5 rounded-2xl bg-[#1b4749] p-4">
           <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#c5fbef]">
             <LocateFixed className="h-4 w-4" />
             Device permissions
@@ -527,7 +491,7 @@ function AuthExperience({
               {locationState === "granted" ? "Enabled" : "Enable"}
             </button>
           </div>
-        </div>
+        </div>}
 
         <div className="space-y-3">
           {authMode === "signup" && (
@@ -562,35 +526,18 @@ function AuthExperience({
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-bold uppercase tracking-[0.14em] text-[#b8d6cf]">Phone number</label>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-[0.14em] text-[#b8d6cf]">Phone number (optional)</label>
                 <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3">
                   <Phone className="h-4 w-4 text-[#7ab7a7]" />
                   <input
                     value={form.phone}
                     onChange={(event) => updateForm("phone", event.target.value)}
+                    disabled={phoneOtpSent}
                     className="w-full bg-transparent py-3 text-sm text-white placeholder:text-[#8dbab2] outline-none"
-                    placeholder="+234 800 000 0000"
+                    placeholder="Optional — +234 800 000 0000"
                     type="tel"
                   />
                 </div>
-                <button
-                  onClick={handlePhoneVerify}
-                  disabled={submitting || isPhoneVerified}
-                  className="mt-2 inline-flex items-center gap-2 rounded-full border border-[#f4b942]/50 bg-[#f4b942] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#11393b]"
-                >
-                  {isPhoneVerified ? "Phone verified" : phoneOtpSent ? "Verify code" : "Send verification code"}
-                </button>
-                {phoneOtpSent && !isPhoneVerified && (
-                  <input
-                    value={phoneOtp}
-                    onChange={(event) => setPhoneOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm tracking-[0.3em] text-white outline-none"
-                    placeholder="6-digit SMS code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                  />
-                )}
                 {isPhoneVerified && <div className="mt-2 text-xs font-medium text-[#a9f0d5]">Verified</div>}
               </div>
             </div>
@@ -661,7 +608,7 @@ function AuthExperience({
           disabled={submitting}
           className="mt-5 w-full rounded-2xl bg-[#f4b942] px-4 py-3 text-sm font-black uppercase tracking-[0.12em] text-[#12393a] transition hover:bg-[#f6c967] disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {submitting ? "Please wait..." : authMode === "signup" ? "Create account" : "Sign in"}
+          {submitting ? "Please wait..." : authMode === "signup" ? isPhoneVerified ? "Finish account setup" : "Create account" : "Sign in"}
         </button>
       </div>
     </div>
@@ -670,7 +617,7 @@ function AuthExperience({
 
 function RiderDashboard({ user, onSignedOut }: { user: SupabaseUser; onSignedOut: () => void }) {
   const [activeTab, setActiveTab] = useState<ActivityTab>("home");
-  const [selectedRide, setSelectedRide] = useState<RideSample>(rideSamples[0]);
+  const [selectedRide, setSelectedRide] = useState<RideHistoryItem | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [supportIssue, setSupportIssue] = useState<string | null>(null);
 
@@ -725,152 +672,12 @@ function RiderDashboard({ user, onSignedOut }: { user: SupabaseUser; onSignedOut
           </div>
         </header>
 
-        <div className="px-4 pb-4">
-          <div className="relative overflow-hidden rounded-[30px] border border-[#dfeceb] bg-[#eaf4f1] p-3 shadow-[0_20px_60px_rgba(16,53,58,0.08)]">
-            <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(30deg,#a0c0b8_1px,transparent_1px),linear-gradient(120deg,#a0c0b8_1px,transparent_1px)] [background-size:52px_52px]" />
-            <div className="relative h-[320px] rounded-[24px] bg-[#dfeee8] p-4">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#3f6d68]">Live map</div>
-                <div className="flex items-center gap-1 rounded-full bg-[#12393a] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#e6f5ef]">
-                  <span className="inline-block h-2 w-2 rounded-full bg-[#59d0a2]" /> Available
-                </div>
-              </div>
-
-              <div className="relative h-[228px] rounded-[22px] bg-[#d8efe8]">
-                <div className="absolute left-5 top-6 h-4 w-4 rounded-full bg-[#1d4d51] shadow-[0_0_0_7px_rgba(29,77,81,0.15)]" />
-                <div className="absolute right-7 top-16 h-4 w-4 rounded-full bg-[#f4b942] shadow-[0_0_0_7px_rgba(244,185,66,0.18)]" />
-                <div className="absolute inset-x-8 bottom-10 mx-auto h-20 w-20 rounded-full border-2 border-dashed border-[#4b8d82]" />
-                <div className="absolute inset-x-0 top-0 h-full">
-                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
-                    <path d="M10 52 Q 35 30, 52 56 T 90 38" fill="none" stroke="#1c4b4d" strokeWidth="2.5" strokeDasharray="3 4" />
-                    <path d="M18 70 Q 42 55, 63 50 T 84 44" fill="none" stroke="#f4b942" strokeWidth="2.5" strokeDasharray="3 4" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {activeTab === "home" && (
-          <div className="px-4">
-            <div className="mt-4 rounded-[28px] bg-white p-4 shadow-[0_14px_36px_rgba(16,53,58,0.05)]">
-              <div className="space-y-3">
-                <div className="rounded-2xl border border-[#e5efed] bg-[#f6fbfa] px-3 py-2">
-                  <div className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#71a29c]">Pickup</div>
-                  <div className="flex items-center gap-2 text-sm font-bold text-[#1c3d3d]">
-                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#1b8d72]" />
-                    Uyo Main Park
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-[#e5efed] bg-[#f6fbfa] px-3 py-2">
-                  <div className="mb-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#71a29c]">Destination</div>
-                  <div className="flex items-center gap-2 text-sm font-bold text-[#1c3d3d]">
-                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#f4b942]" />
-                    Four Points by Sheraton, Uyo
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#12393a] p-3 text-white">
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#bfe1d6]">Estimated fare</div>
-                  <div className="mt-1 text-xl font-black tracking-[-0.05em]">₦6,800</div>
-                </div>
-                <div className="rounded-xl bg-[#f4b942] px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[#12393a]">Kkary Bike</div>
-              </div>
-            </div>
-          </div>
+          <RiderBooking />
         )}
 
         {activeTab === "activity" && (
-          <div className="px-4">
-            <div className="mt-4 space-y-4">
-              {rideSamples.map((ride) => (
-                <button
-                  key={ride.id}
-                  onClick={() => setSelectedRide(ride)}
-                  className={`w-full rounded-[28px] border p-4 text-left shadow-[0_14px_36px_rgba(16,53,58,0.05)] transition ${selectedRide.id === ride.id ? "border-[#95d7c7] bg-[#edf9f5]" : "border-[#e5efed] bg-white"}`}
-                >
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#6a9a92]">{ride.status}</div>
-                    <div className="text-sm font-black text-[#163c3d]">{ride.price}</div>
-                  </div>
-
-                  <div className="relative h-[84px] overflow-hidden rounded-2xl bg-[#e8f3ef]">
-                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
-                      <path d="M10 58 C30 42, 50 52, 68 46 S 90 36, 100 22" fill="none" stroke="#1f4a4d" strokeWidth="3" strokeDasharray="4 4" />
-                    </svg>
-                    <span className="absolute left-3 top-4 h-3 w-3 rounded-full bg-[#1f4a4d]" />
-                    <span className="absolute right-4 bottom-6 h-3 w-3 rounded-full bg-[#f4b942]" />
-                  </div>
-
-                  <div className="mt-3 space-y-1 text-sm text-[#264b4a]">
-                    <div className="flex items-start gap-2">
-                      <MapPin className="mt-0.5 h-4 w-4 text-[#1d8d72]" />
-                      <span>{ride.pickup}</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <MapPin className="mt-0.5 h-4 w-4 text-[#f4b942]" />
-                      <span>{ride.dropoff}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xs font-medium text-[#6a8a86]">{ride.date} • {ride.time}</span>
-                    <span className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-[0.12em] text-[#234d4e]">
-                      Rebook <ChevronRight className="h-3.5 w-3.5" />
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {selectedRide && (
-              <div className="mt-5 rounded-[28px] bg-white p-4 shadow-[0_14px_36px_rgba(16,53,58,0.05)]">
-                <div className="flex items-center justify-between">
-                  <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#6a9a92]">Ride details</div>
-                  <button onClick={() => setHelpOpen(true)} className="rounded-full border border-[#dfeceb] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[#1f494b]">
-                    Get help
-                  </button>
-                </div>
-
-                <div className="mt-3 rounded-2xl bg-[#eef8f5] p-4">
-                  <div className="text-lg font-black text-[#12393a]">{selectedRide.dropoff}</div>
-                  <div className="mt-2 flex items-center gap-3 text-xs text-[#698883]">
-                    <span>{selectedRide.date}</span>
-                    <span>•</span>
-                    <span>{selectedRide.time}</span>
-                    <span>•</span>
-                    <span>{selectedRide.price}</span>
-                  </div>
-                </div>
-
-                <div className="mt-3 rounded-2xl border border-[#e5efed] bg-[#f7fbfa] p-3">
-                  <div className="flex items-center gap-2 text-sm font-bold text-[#234d4e]">
-                    <Bike className="h-4 w-4 text-[#f4b942]" />
-                    {selectedRide.vehicle}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setSelectedRide(rideSamples[0])}
-                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#12393a] px-4 py-3 text-sm font-black uppercase tracking-[0.12em] text-white"
-                >
-                  <RefreshCcw className="h-4 w-4" />
-                  Rebook
-                </button>
-
-                <button
-                  onClick={() => setHelpOpen(true)}
-                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#dfeceb] bg-white px-4 py-3 text-sm font-black uppercase tracking-[0.12em] text-[#234d4e]"
-                >
-                  <CircleHelp className="h-4 w-4" />
-                  Get Help With Ride
-                </button>
-              </div>
-            )}
-          </div>
+          <RiderActivity onGetHelp={ride => { setSelectedRide(ride); setHelpOpen(true); }} />
         )}
 
         {helpOpen && (
@@ -883,20 +690,20 @@ function RiderDashboard({ user, onSignedOut }: { user: SupabaseUser; onSignedOut
                 </button>
               </div>
 
-              <div className="rounded-2xl bg-[#eef8f5] p-4">
-                <div className="text-lg font-black text-[#12393a]">{selectedRide.dropoff}</div>
-                <div className="mt-2 flex items-center gap-3 text-xs text-[#5c7975]">
-                  <span>{selectedRide.date}</span>
-                  <span>•</span>
-                  <span>{selectedRide.time}</span>
-                  <span>•</span>
-                  <span>{selectedRide.price}</span>
+              {selectedRide && (
+                <div className="rounded-2xl bg-[#eef8f5] p-4">
+                  <div className="text-lg font-black text-[#12393a]">{selectedRide.dropoff_address}</div>
+                  <div className="mt-2 flex items-center gap-3 text-xs text-[#5c7975]">
+                    <span>{rideWhen(selectedRide.created_at)}</span>
+                    <span>•</span>
+                    <span>₦{Number(selectedRide.estimated_fare).toLocaleString("en-NG")}</span>
+                  </div>
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-[#234d4e]">
+                    <Bike className="h-3.5 w-3.5 text-[#f4b942]" />
+                    {selectedRide.driver?.name || `Kkar ${selectedRide.vehicle_type}`}
+                  </div>
                 </div>
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-[#234d4e]">
-                  <Bike className="h-3.5 w-3.5 text-[#f4b942]" />
-                  {selectedRide.vehicle}
-                </div>
-              </div>
+              )}
 
               <div className="mt-4 text-[10px] font-black uppercase tracking-[0.14em] text-[#5f928b]">Select an issue</div>
               <div className="mt-2 space-y-2">
@@ -974,33 +781,38 @@ function RiderDashboard({ user, onSignedOut }: { user: SupabaseUser; onSignedOut
 }
 
 export default function RiderExperience() {
-  const { canInstall, installApp } = usePwaInstall();
+  const { canInstall, isInstalled, installApp } = usePwaInstall();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isStandaloneApp, setIsStandaloneApp] = useState(false);
+  const isStandaloneApp = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(display-mode: standalone)").matches ||
+      Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+  }, []);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [sessionError, setSessionError] = useState("");
   const [signupVerificationPending, setSignupVerificationPending] = useState(false);
   const [returningFromLogout, setReturningFromLogout] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const browserStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
-
-    setIsStandaloneApp(browserStandalone);
     setHasSeenOnboarding(localStorage.getItem("kkar-onboarding-seen") === "true");
 
+    let mounted = true;
     const syncSession = async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getSession();
+      if (!mounted) return;
+      if (error) setSessionError(error.message);
       setSession(data.session);
+      setSessionReady(true);
     };
-
-    syncSession();
+    void syncSession();
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, currentSession) => {
       setSession(currentSession);
+      setSessionReady(true);
       if (event === "SIGNED_OUT") {
         setSignupVerificationPending(false);
         setReturningFromLogout(true);
@@ -1008,11 +820,61 @@ export default function RiderExperience() {
     });
 
     return () => {
+      mounted = false;
       subscription.subscription.unsubscribe();
     };
   }, []);
 
-  if (isStandaloneApp && !hasSeenOnboarding) {
+  if (!isStandaloneApp) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#123b3a] to-[#0c292c] px-4 pb-28 text-white">
+        <div className="flex h-20 w-20 items-center justify-center rounded-[26px] bg-[#f4b942] text-[#102a2c] shadow-[0_14px_40px_rgba(244,185,66,0.28)]">
+          <Navigation className="h-10 w-10 fill-current" strokeWidth={2.5} />
+        </div>
+        <h1 className="mt-6 text-3xl font-black tracking-tight">Kkary Rider</h1>
+        <p className="mt-2 max-w-sm text-center leading-relaxed text-[#c2ddd7]">
+          Install the Kkary Rider app to book rides and follow your driver.
+        </p>
+        {!isInstalled && (
+          <div className="fixed inset-x-0 bottom-0 border-t border-white/10 bg-[#0c292c]/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <button
+              onClick={installApp}
+              className="w-full rounded-xl bg-[#f4b942] px-6 py-3.5 font-bold text-[#153a3a] hover:bg-[#e8b139]"
+            >
+              Download Rider App
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (!sessionReady) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#0d2d30] text-sm font-semibold text-white">Restoring your Kkar session…</div>;
+  }
+
+  if (sessionError && !session) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0d2d30] px-6 text-center text-white">
+        <p>Unable to restore your session: {sessionError}</p>
+        <button onClick={() => window.location.reload()} className="rounded-xl bg-[#f4b942] px-5 py-3 font-bold text-[#153a3a]">Try again</button>
+      </div>
+    );
+  }
+
+  if (isStandaloneApp && session && !signupVerificationPending) {
+    return (
+      <RiderDashboard
+        user={session.user}
+        onSignedOut={() => {
+          setSession(null);
+          setReturningFromLogout(true);
+        }}
+      />
+    );
+  }
+
+  if (isStandaloneApp && !session && !signupVerificationPending && !hasSeenOnboarding) {
     return <OnboardingView onDone={() => { localStorage.setItem("kkar-onboarding-seen", "true"); setHasSeenOnboarding(true); }} />;
   }
 
@@ -1032,20 +894,15 @@ export default function RiderExperience() {
     );
   }
 
-  if (isStandaloneApp && session && !signupVerificationPending) {
-    return (
-      <RiderDashboard
-        user={session.user}
-        onSignedOut={() => {
-          setSession(null);
-          setReturningFromLogout(true);
-        }}
-      />
-    );
-  }
-
   return (
-    <div className="min-h-screen overflow-hidden bg-[#f6fbf8] text-[#183b3b]">
+    <div className="min-h-screen bg-[#f6fbf8] pb-20 text-[#183b3b]">
+      {canInstall && !isInstalled && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/15 bg-[#113a3b]/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.18)] md:hidden">
+          <button onClick={installApp} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#f4b942] px-4 py-3.5 text-sm font-black text-[#153a3a]">
+            <Download className="h-4 w-4" /> Download Rider App <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <section className="relative bg-[#113a3b]">
         <div className="absolute inset-0 opacity-25 [background-image:radial-gradient(circle_at_12%_18%,#5ca58f_1px,transparent_1px),radial-gradient(circle_at_80%_65%,#f4b942_1px,transparent_1px)] [background-size:36px_36px,52px_52px]" />
         <header className="relative mx-auto flex max-w-[1240px] items-center justify-between px-5 py-5 lg:px-8">
@@ -1057,9 +914,9 @@ export default function RiderExperience() {
             <a href="/drivers" className="transition-colors hover:text-white">Kkary for Drivers</a>
           </nav>
           <div className="hidden items-center gap-3 md:flex">
-            {canInstall && (
+            {canInstall && !isInstalled && (
               <button onClick={installApp} className="rounded-xl bg-[#f4b942] px-4 py-2.5 text-xs font-black text-[#153a3a] hover:bg-[#e8b139]">
-                Download App <Download className="ml-2 inline h-3.5 w-3.5" />
+                Download Rider App <Download className="ml-2 inline h-3.5 w-3.5" />
               </button>
             )}
           </div>
@@ -1091,10 +948,6 @@ export default function RiderExperience() {
             <p className="mt-7 max-w-[520px] text-base leading-relaxed text-[#bad5d1] sm:text-lg">
               Kkary connects riders and trusted drivers across Akwa Ibom with clear fares, safer trips, and technology made for everyday movement.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <StoreButton platform="android" href={getAppDownloadUrl("rider")} />
-              <StoreButton platform="ios" href={getAppDownloadUrl("rider")} />
-            </div>
             <div className="mt-7 flex items-center gap-3 text-[11px] font-semibold text-[#9fc9c0]">
               <ShieldCheck className="h-4 w-4 text-[#62b193]" /> Secure payments · Verified drivers · Built for local routes
             </div>

@@ -1,0 +1,29 @@
+{
+  "id": "/drivers",
+  "name": "Kkary Driver — Local Mobility",
+  "short_name": "Kkary Driver",
+  "description": "Accept trips and manage driver earnings with Kkary Driver",
+  "start_url": "/drivers",
+  "scope": "/",
+  "display_override": ["standalone", "minimal-ui"],
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#113a3b",
+  "icons": [
+    {
+      "src": "/icons/driver-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/driver-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["transportation", "travel"],
+  "prefer_related_applications": false
+}

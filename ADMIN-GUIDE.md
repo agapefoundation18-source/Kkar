@@ -36,6 +36,7 @@
   - Manage pricing & revenue share
   - View system overview & metrics
   - Access mail/messages
+  - Publish app releases
   - Cannot create other admins
 
 - **How to use:**
@@ -49,6 +50,7 @@
   - Send in-app messages to riders/drivers by username
   - Receive & respond to user messages
   - View message history
+  - Cannot publish app releases
   - Cannot manage drivers or system settings
 
 - **How to use:**
@@ -102,6 +104,21 @@
 4. Approve or request resubmission
 5. Approved drivers can activate
 
+### Approving Kkar PWA Drivers
+The Rider and Driver PWAs use Supabase profiles, separate from the legacy driver/document records above.
+1. Apply `supabase/migrations/20261008_live_ride_dispatch.sql` and then `supabase/migrations/20261010_live_dispatch_offers_and_vehicle_availability.sql` to the Kkar Supabase project. The second migration also installs the Auth-user profile trigger required for new Rider and Driver accounts.
+2. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as server-only deployment variables; never expose the service-role key to browser code.
+3. Go to **Driver review** and review the **Kkar app driver applications** queue.
+4. Independently complete the required identity, licence, vehicle-registration, and insurance checks before approving an applicant. The PWA application form only collects vehicle details; it does not collect verification documents.
+5. Use **Approve** only after those checks. Approved drivers can then go online in the Driver PWA; unapproved drivers cannot accept rides.
+
+Ride options show the server-calculated fare and count of approved, online drivers within 30 km of pickup whose location was refreshed in the last two minutes. Drivers see matching offers with the rider's name, private profile picture when available, and pickup/drop-off pins; they can accept or permanently decline an individual offer. Rider and driver profile pictures are shared only with the other party during an eligible pickup or active ride. The offer list refreshes while the Driver app is open.
+
+### Rider and Driver Sessions
+Both PWAs persist Supabase sessions and restore a valid session directly to the dashboard. Location access is checked during new account creation only; sign-in does not require another location prompt. The operating system may still require the user to re-enable location from device settings after revoking the permission.
+
+To expire sessions after about two months of inactivity, set the Supabase project's **Auth → Sessions → Inactivity timeout** to **60 days** (or the closest supported value). Keep the maximum session lifetime unset or longer than the inactivity timeout. The browser client refreshes and persists sessions, but the inactivity window is enforced by Supabase Auth and cannot be changed by a frontend setting or database migration.
+
 ### Adjusting Pricing
 1. Go to **Pricing & share** section
 2. Set **Platform commission %** (e.g., 20% = 80% goes to driver)
@@ -112,6 +129,29 @@
    - Set minimum fare (₦)
 4. Click "Add pricing rule"
 5. Changes apply to new rides immediately
+
+### Publishing App Updates
+1. Open **App releases** in the admin console.
+2. Choose **Publish new version** for an update that should show an Update button to older rider and driver PWAs. Enter a newer semantic version (for example `1.2.0`) and optional release notes.
+3. Choose **Publish current changes** for a routine deployment that should not show a new update prompt. This requires `VERCEL_DEPLOY_HOOK_URL` to be set as a server-side Vercel environment variable.
+4. The rider PWA is installed from `/`; the driver PWA is installed from `/drivers`. They use separate manifests and start screens.
+5. Existing installs should be removed and reinstalled from the correct page after the new icons/manifests deploy, especially if the previous shortcut showed browser branding or opened in a browser tab.
+
+The admin actions publish release metadata or request a Vercel deployment. New code still has to be deployed first for a version release to identify its build. Automatic deployment on every code edit requires connecting the Vercel project to the Git repository and enabling production deployments from the desired branch. Direct local edits are not deployed automatically.
+
+### Managing the Coming Soon Page
+1. Sign in at `/admin`. The first-time administrator setup requires a new username and password; after saving, you are signed out and must sign in again with the new credentials.
+2. Open **Launch page**.
+3. Set the planned launch date and time using your local timezone.
+4. Turn on **Enable coming soon** and save. Visitors to the Rider (`/`) and Driver (`/drivers`) URLs see the launch countdown and waitlist instead of the apps. The admin console remains available.
+5. Turn the setting off and save when the apps are ready for public access.
+6. The waitlist panel shows submitted email addresses and can export them as CSV. Waitlist entries are stored in the existing platform settings table; only administrator accounts can list or export them.
+
+### Configuring Geoapify Maps
+1. Create a Geoapify account and an API key at [geoapify.com](https://www.geoapify.com/).
+2. Set `VITE_GEOAPIFY_API_KEY` in local development and the Vercel project’s build environment, then redeploy so Vite can include it in the Rider and Driver apps.
+3. The browser key is visible in client requests. Restrict its allowed origins to the Kkar production domains and local development, and set provider quotas/usage alerts.
+4. The apps use Geoapify map tiles, address autocomplete, reverse geocoding, and driving routes with turn-by-turn instructions. The map displays Geoapify/OpenStreetMap attribution.
 
 ---
 

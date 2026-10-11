@@ -26,12 +26,13 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
-import { getAppDownloadUrl, type AppKind } from "@/lib/appDownloads";
 import { normalizeE164PhoneNumber } from "@/lib/phoneAuth";
 import { supabase } from "@/lib/supabase";
+import { AppUpdateCard } from "@/components/AppUpdateCard";
+import { DriverDispatch } from "@/components/ride/DriverDispatch";
 
 type AuthMode = "signup" | "signin";
-type ActivityTab = "home" | "earnings";
+type ActivityTab = "home" | "earnings" | "account";
 
 const onboardingSlides = [
   {
@@ -57,17 +58,23 @@ const onboardingSlides = [
 ];
 
 export function DriverExperience() {
+  const { canInstall, isInstalled, installApp } = usePwaInstall();
   const isStandalone = useMemo(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true;
   }, []);
 
   const [session, setSession] = useState<Session | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [sessionError, setSessionError] = useState("");
   const [signupVerificationPending, setSignupVerificationPending] = useState(false);
   const [signupCompleted, setSignupCompleted] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
-  const [activeSlide, setActiveSlide] = useState(0);
-  const [locationPermission, setLocationPermission] = useState<"unknown" | "granted" | "denied">("unknown");
+  const [activeSlide, setActiveSlide] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    return localStorage.getItem("kkary-driver-onboarding-seen") === "true" ? onboardingSlides.length : 0;
+  });
+  const [locationEnabled, setLocationEnabled] = useState(false);
   const [currentTab, setCurrentTab] = useState<ActivityTab>("home");
   const [unreadMailCount, setUnreadMailCount] = useState(0);
 
@@ -81,36 +88,192 @@ export function DriverExperience() {
   const [mailList, setMailList] = useState<any[]>([]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    let mounted = true;
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) setSessionError(error.message);
+      setSession(data.session);
+      setSessionReady(true);
+    }).catch(cause => {
+      if (!mounted) return;
+      setSessionError(cause instanceof Error ? cause.message : "Unable to restore your session.");
+      setSessionReady(true);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      setSessionReady(true);
     });
 
-    return () => authListener?.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        () => setLocationPermission("granted"),
-        () => setLocationPermission("denied"),
-        { timeout: 3000 }
-      );
+    if (authMode !== "signup" || locationEnabled || !navigator.permissions) return;
+    void navigator.permissions.query({ name: "geolocation" })
+      .then(permission => {
+        if (permission.state === "granted") setLocationEnabled(true);
+      })
+      .catch(() => {});
+  }, [authMode, locationEnabled]);
+
+  const requestDriverLocation = () => {
+    if (!navigator.geolocation) {
+      alert("This device does not support location services.");
+      return;
     }
-  }, []);
+    navigator.geolocation.getCurrentPosition(
+      () => setLocationEnabled(true),
+      () => setLocationEnabled(false),
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  };
+
+  const createDriverAccount = async () => {
+    if (!locationEnabled) {
+      alert("Enable location access once during sign-up. You can change this later in your device settings.");
+      return;
+    }
+    const phone = signupForm.phone.trim() ? normalizeE164PhoneNumber(signupForm.phone) : null;
+    if (signupForm.phone.trim() && !phone) {
+      alert("Enter a valid phone number in international format, such as +2348000000000.");
+      return;
+    }
+    if (
+      !signupForm.name.trim() ||
+      !signupForm.email.trim() ||
+      signupForm.password.length < 10 ||
+      signupForm.password !== signupForm.confirmPassword
+    ) {
+      alert("Complete all details, use a password of at least 10 characters, and make sure both passwords match.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signUp(phone
+        ? {
+            phone,
+            password: signupForm.password,
+            options: {
+              data: {
+                name: signupForm.name.trim(),
+                full_name: signupForm.name.trim(),
+                email: signupForm.email.trim(),
+                phone,
+                user_type: "driver",
+              },
+            },
+          }
+        : {
+            email: signupForm.email.trim(),
+            password: signupForm.password,
+            options: {
+              data: {
+                name: signupForm.name.trim(),
+                full_name: signupForm.name.trim(),
+                phone: null,
+                user_type: "driver",
+              },
+            },
+          });
+      if (error) throw error;
+      if (!phone) {
+        if (!data.session) {
+          alert("Email confirmation is enabled for this Supabase project. Disable it to create accounts without a verification step.");
+          return;
+        }
+        setSignupCompleted(true);
+      } else {
+        setPhoneOtp("");
+        setPhoneOtpSent(true);
+      }
+    } catch (cause) {
+      alert(`Unable to create account: ${cause instanceof Error ? cause.message : "Phone verification failed"}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyDriverPhone = async (code: string) => {
+    if (!/^\d{6}$/.test(code) || isLoading) return;
+    const phone = normalizeE164PhoneNumber(signupForm.phone);
+    if (!phone) {
+      alert("Enter a valid phone number.");
+      return;
+    }
+    setIsLoading(true);
+    setSignupVerificationPending(true);
+    let phoneVerified = false;
+    try {
+      const { error: verifyError } = await supabase.auth.verifyOtp({ phone, token: code, type: "sms" });
+      if (verifyError) throw verifyError;
+      phoneVerified = true;
+      setIsPhoneVerified(true);
+      const { error: updateError } = await supabase.auth.updateUser({
+        email: signupForm.email.trim(),
+        data: {
+          name: signupForm.name.trim(),
+          full_name: signupForm.name.trim(),
+          phone,
+          user_type: "driver",
+        },
+      });
+      if (updateError) throw updateError;
+      setSignupCompleted(true);
+      setSignupVerificationPending(false);
+    } catch (cause) {
+      if (!phoneVerified) setSignupVerificationPending(false);
+      alert(`Unable to verify code: ${cause instanceof Error ? cause.message : "Phone verification failed"}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendDriverCode = async () => {
+    const phone = normalizeE164PhoneNumber(signupForm.phone);
+    if (!phone) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({ type: "sms", phone });
+      if (error) throw error;
+      setPhoneOtp("");
+      alert(`A new verification code was sent to ${phone}.`);
+    } catch (cause) {
+      alert(`Unable to resend verification code: ${cause instanceof Error ? cause.message : "Please try again."}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (!isStandalone) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-black to-gray-900 px-4 text-white">
-        <Smartphone className="w-16 h-16 mb-4 text-blue-500" />
-        <h1 className="text-3xl font-bold mb-2">Kkary Driver</h1>
-        <p className="text-gray-300 mb-6 text-center">Download the app to start earning</p>
-        <a href={getAppDownloadUrl("driver")} className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold">
-          Download Now
-        </a>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-black to-gray-900 px-4 pb-24 text-white">
+        <Smartphone className="mb-4 h-16 w-16 text-blue-500" />
+        <h1 className="mb-2 text-3xl font-bold">Kkary Driver</h1>
+        <p className="text-center text-gray-300">Install the Kkary Driver app to start earning.</p>
+        {canInstall && !isInstalled && (
+          <div className="fixed inset-x-0 bottom-0 border-t border-gray-700 bg-gray-950/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <button onClick={installApp} className="w-full rounded-xl bg-blue-600 px-6 py-3.5 font-semibold text-white hover:bg-blue-700">
+              Download Driver App
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (!sessionReady) {
+    return <div className="flex min-h-screen items-center justify-center bg-gray-900 text-sm font-semibold text-white">Restoring your Kkary Driver session…</div>;
+  }
+
+  if (sessionError && !session) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-900 px-6 text-center text-white">
+        <p>Unable to restore your session: {sessionError}</p>
+        <button onClick={() => window.location.reload()} className="rounded-xl bg-blue-600 px-5 py-3 font-bold">Try again</button>
       </div>
     );
   }
@@ -118,7 +281,48 @@ export function DriverExperience() {
   if (!session || signupVerificationPending || (authMode === "signup" && isPhoneVerified && !signupCompleted)) {
     return (
       <div className="flex flex-col h-screen bg-gray-900 text-white">
-        {activeSlide < onboardingSlides.length && !session ? (
+        {phoneOtpSent && authMode === "signup" && !isPhoneVerified ? (
+          <div className="flex flex-1 flex-col items-center justify-center px-4">
+            <div className="w-full max-w-md">
+              <h2 className="text-center text-2xl font-bold">Verify your phone number</h2>
+              <p className="mt-3 text-center text-sm text-gray-300">
+                We sent a verification code to <strong className="text-white">{normalizeE164PhoneNumber(signupForm.phone)}</strong>.
+              </p>
+              <input
+                autoFocus
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                aria-label="6-digit verification code"
+                placeholder="••••••"
+                value={phoneOtp}
+                onChange={event => {
+                  const code = event.target.value.replace(/\D/g, "").slice(0, 6);
+                  setPhoneOtp(code);
+                  if (code.length === 6) void verifyDriverPhone(code);
+                }}
+                maxLength={6}
+                className="mt-6 w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-4 text-center text-2xl tracking-[0.5em] text-white outline-none focus:border-blue-500"
+              />
+              {isLoading && <p className="mt-3 text-center text-sm text-gray-300">Verifying code…</p>}
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={() => void resendDriverCode()}
+                className="mt-5 w-full rounded-lg border border-gray-600 px-4 py-3 font-semibold text-white disabled:opacity-60"
+              >
+                Resend verification code
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPhoneOtpSent(false); setPhoneOtp(""); }}
+                className="mt-3 w-full text-sm text-gray-300"
+              >
+                Change phone number
+              </button>
+            </div>
+          </div>
+        ) : activeSlide < onboardingSlides.length && !session ? (
           <div className="flex-1 flex flex-col items-center justify-center px-4">
             <div className="mb-8 text-center">
               {(() => {
@@ -152,11 +356,9 @@ export function DriverExperience() {
               ) : (
                 <button
                   onClick={() => {
-                    if (locationPermission === "granted") {
-                      setAuthMode("signin");
-                    } else {
-                      alert("Location permission is required to continue");
-                    }
+                    localStorage.setItem("kkary-driver-onboarding-seen", "true");
+                    setActiveSlide(onboardingSlides.length);
+                    setAuthMode("signin");
                   }}
                   className="flex-1 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-semibold flex items-center justify-center gap-2"
                 >
@@ -176,7 +378,7 @@ export function DriverExperience() {
                   onSubmit={async (e) => {
                     e.preventDefault();
                     if (!isPhoneVerified) {
-                      alert("Verify your phone number with the SMS code before creating your account.");
+                      await createDriverAccount();
                       return;
                     }
                     setIsLoading(true);
@@ -188,7 +390,6 @@ export function DriverExperience() {
                         data: { name: signupForm.name.trim(), full_name: signupForm.name.trim(), phone, user_type: "driver" },
                       });
                       if (error) throw error;
-                      alert("Your phone is verified. Check your email to enable email sign-in; you can sign in with your phone and password now.");
                       setSignupCompleted(true);
                       setSignupVerificationPending(false);
                     } catch (err) {
@@ -198,12 +399,22 @@ export function DriverExperience() {
                     }
                   }}
                 >
+                  <div className="rounded-lg border border-gray-700 bg-gray-800 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">Location access</div>
+                        <div className="mt-1 text-xs text-gray-400">Enable once during sign-up so nearby rides can be matched.</div>
+                      </div>
+                      <button type="button" onClick={requestDriverLocation} className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold">
+                        {locationEnabled ? "Enabled" : "Enable"}
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     placeholder="Full Name"
                     value={signupForm.name}
                     onChange={(e) => setSignupForm({ ...signupForm, name: e.target.value })}
-                    disabled={phoneOtpSent}
                     required
                     className="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-blue-500 outline-none"
                   />
@@ -212,104 +423,26 @@ export function DriverExperience() {
                     placeholder="Email"
                     value={signupForm.email}
                     onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
-                    disabled={phoneOtpSent}
                     required
                     className="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-blue-500 outline-none"
                   />
-                  <div className="flex gap-2">
-                    <input
-                      type="tel"
-                      placeholder="Phone"
-                      value={signupForm.phone}
-                      onChange={(e) => {
-                        setSignupForm({ ...signupForm, phone: e.target.value });
-                        setIsPhoneVerified(false);
-                        setPhoneOtpSent(false);
-                        setPhoneOtp("");
-                      }}
-                      required
-                      className="flex-1 px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-blue-500 outline-none"
-                    />
-                    <button
-                      type="button"
-                      disabled={isLoading || isPhoneVerified}
-                      onClick={async () => {
-                        const phone = normalizeE164PhoneNumber(signupForm.phone);
-                        if (!phone) {
-                          alert("Enter a valid phone number in international format, such as +2348000000000.");
-                          return;
-                        }
-                        if (!signupForm.name.trim() || !signupForm.email.trim() || signupForm.password.length < 10 || signupForm.password !== signupForm.confirmPassword) {
-                          alert("Complete your details, use a password of at least 10 characters, and make sure both passwords match before requesting a code.");
-                          return;
-                        }
-                        setIsLoading(true);
-                        try {
-                          const { error } = await supabase.auth.signUp({
-                            phone,
-                            password: signupForm.password,
-                            options: {
-                              data: { name: signupForm.name.trim(), full_name: signupForm.name.trim(), email: signupForm.email.trim(), phone, user_type: "driver" },
-                            },
-                          });
-                          if (error) throw error;
-                          setPhoneOtpSent(true);
-                          alert("We sent a verification code by SMS. Enter it below to verify your phone.");
-                        } catch (err) {
-                          alert(`Unable to send verification code: ${err instanceof Error ? err.message : "Phone verification failed"}`);
-                        } finally {
-                          setIsLoading(false);
-                        }
-                      }}
-                      className={`px-4 py-3 rounded-lg font-semibold flex items-center gap-2 ${isPhoneVerified ? "bg-green-600" : "bg-gray-700 hover:bg-gray-600"}`}
-                    >
-                      {isPhoneVerified ? <Check className="w-5 h-5" /> : phoneOtpSent ? "Verify code" : "Send code"}
-                    </button>
-                  </div>
-                  {phoneOtpSent && !isPhoneVerified && (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        placeholder="6-digit SMS code"
-                        value={phoneOtp}
-                        onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        maxLength={6}
-                        className="flex-1 px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-blue-500 outline-none"
-                      />
-                      <button
-                        type="button"
-                        disabled={isLoading || phoneOtp.length !== 6}
-                        onClick={async () => {
-                          const phone = normalizeE164PhoneNumber(signupForm.phone);
-                          if (!phone) return;
-                          setIsLoading(true);
-                          setSignupVerificationPending(true);
-                          try {
-                            const { error } = await supabase.auth.verifyOtp({ phone, token: phoneOtp, type: "sms" });
-                            if (error) throw error;
-                            setIsPhoneVerified(true);
-                            alert("Phone number verified. Create your account to continue.");
-                          } catch (err) {
-                            setSignupVerificationPending(false);
-                            alert(`Unable to verify code: ${err instanceof Error ? err.message : "Phone verification failed"}`);
-                          } finally {
-                            setIsLoading(false);
-                          }
-                        }}
-                        className="px-4 py-3 rounded-lg font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700"
-                      >
-                        Verify
-                      </button>
-                    </div>
-                  )}
+                  <input
+                    type="tel"
+                    placeholder="Phone (optional)"
+                    value={signupForm.phone}
+                    onChange={(e) => {
+                      setSignupForm({ ...signupForm, phone: e.target.value });
+                      setIsPhoneVerified(false);
+                      setPhoneOtpSent(false);
+                      setPhoneOtp("");
+                    }}
+                    className="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-blue-500 outline-none"
+                  />
                   <input
                     type="password"
                     placeholder="Password (min 10 chars)"
                     value={signupForm.password}
                     onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
-                    disabled={phoneOtpSent}
                     minLength={10}
                     required
                     className="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-blue-500 outline-none"
@@ -319,12 +452,11 @@ export function DriverExperience() {
                     placeholder="Confirm Password"
                     value={signupForm.confirmPassword}
                     onChange={(e) => setSignupForm({ ...signupForm, confirmPassword: e.target.value })}
-                    disabled={phoneOtpSent}
                     required
                     className="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-blue-500 outline-none"
                   />
-                  <button type="submit" disabled={isLoading || !isPhoneVerified || signupForm.password !== signupForm.confirmPassword} className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 rounded-lg font-semibold">
-                    {isLoading ? "Creating..." : "Create Account"}
+                  <button type="submit" disabled={isLoading || signupForm.password !== signupForm.confirmPassword} className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 rounded-lg font-semibold">
+                    {isLoading ? "Creating..." : isPhoneVerified ? "Finish Account Setup" : "Create Account"}
                   </button>
                 </form>
               ) : (
@@ -452,56 +584,15 @@ export function DriverExperience() {
       )}
 
       <div className="flex-1 overflow-y-auto pb-20">
-        {currentTab === "home" ? (
-          <div className="p-4 space-y-6">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg p-6 text-white">
-              <h2 className="text-2xl font-bold mb-2">Welcome, {session.user.user_metadata?.name || "Driver"}</h2>
-              <p className="text-blue-100">You're online and available</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-800 rounded-lg p-4">
-                <Clock3 className="w-6 h-6 text-green-500 mb-2" />
-                <p className="text-gray-400 text-sm">Today's Earnings</p>
-                <p className="text-2xl font-bold">₦8,450</p>
-              </div>
-              <div className="bg-gray-800 rounded-lg p-4">
-                <Navigation className="w-6 h-6 text-blue-500 mb-2" />
-                <p className="text-gray-400 text-sm">Trips Completed</p>
-                <p className="text-2xl font-bold">12</p>
-              </div>
-            </div>
-
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="font-bold mb-3 flex items-center gap-2">
-                <MapPin className="w-5 h-5" />
-                Your Location
-              </h3>
-              <div className="w-full h-48 bg-gray-900 rounded flex items-center justify-center text-gray-400">Live Map View</div>
-            </div>
-
-            <button className="w-full py-3 bg-red-600 hover:bg-red-700 rounded-lg font-semibold">Go Offline</button>
+        {currentTab === "account" ? (
+          <div className="space-y-4 p-4">
+            <h2 className="text-2xl font-bold">Settings</h2>
+            <AppUpdateCard variant="driver" />
           </div>
+        ) : currentTab === "home" ? (
+          <DriverDispatch />
         ) : (
-          <div className="p-4 space-y-4">
-            <h2 className="text-2xl font-bold">Earnings</h2>
-            <div className="space-y-3">
-              <div className="bg-gray-800 p-4 rounded-lg">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-semibold">Mon 8:20 PM</span>
-                  <span className="text-green-500 font-bold">+₦2,850</span>
-                </div>
-                <p className="text-gray-400 text-sm">Uyo Main Park → Four Points by Sheraton</p>
-              </div>
-              <div className="bg-gray-800 p-4 rounded-lg">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-semibold">Mon 5:15 PM</span>
-                  <span className="text-green-500 font-bold">+₦3,200</span>
-                </div>
-                <p className="text-gray-400 text-sm">Nwaniba Road → Ewet Housing</p>
-              </div>
-            </div>
-          </div>
+          <DriverDispatch view="earnings" />
         )}
       </div>
 
@@ -520,7 +611,10 @@ export function DriverExperience() {
           <Zap className="w-6 h-6" />
           <span className="text-xs">Earnings</span>
         </button>
-        <button className="flex-1 py-4 flex flex-col items-center gap-1 text-gray-400 hover:text-white">
+        <button
+          onClick={() => setCurrentTab("account")}
+          className={`flex-1 py-4 flex flex-col items-center gap-1 ${currentTab === "account" ? "text-blue-500" : "text-gray-400 hover:text-white"}`}
+        >
           <User className="w-6 h-6" />
           <span className="text-xs">Account</span>
         </button>

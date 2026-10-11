@@ -1,25 +1,27 @@
 {
-  "name": "Kkary — Local Mobility",
-  "short_name": "Kkary",
-  "description": "Trusted mobility for everyday journeys across Akwa Ibom",
+  "id": "/",
+  "name": "Kkary Rider — Local Mobility",
+  "short_name": "Kkary Rider",
+  "description": "Book trusted rides across Akwa Ibom with Kkary Rider",
   "start_url": "/",
   "scope": "/",
+  "display_override": ["standalone", "minimal-ui"],
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#ffffff",
   "theme_color": "#113a3b",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23f4b942' width='192' height='192'/><path fill='%23113a3b' d='M96 48c26.5 0 48 21.5 48 48s-21.5 48-48 48-48-21.5-48-48 21.5-48 48-48zm0 16c-17.7 0-32 14.3-32 32s14.3 32 32 32 32-14.3 32-32-14.3-32-32-32zm0 24c4.4 0 8 3.6 8 8s-3.6 8-8 8-8-3.6-8-8 3.6-8 8-8z'/></svg>",
+      "src": "/icons/rider-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%23f4b942' width='512' height='512'/><path fill='%23113a3b' d='M256 64c106 0 192 86 192 192s-86 192-192 192S64 362 64 256 150 64 256 64zm0 64c-70.7 0-128 57.3-128 128s57.3 128 128 128 128-57.3 128-128-57.3-128-128-128zm0 96c17.7 0 32 14.3 32 32s-14.3 32-32 32-32-14.3-32-32 14.3-32 32-32z'/></svg>",
+      "src": "/icons/rider-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
   "categories": ["transportation", "travel"],

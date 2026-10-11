@@ -1,10 +1,15 @@
 /* Service Worker for Kkary PWA */
 
-const CACHE_NAME = 'kkary-v1';
+const CACHE_NAME = 'kkary-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/manifest-driver.json',
+  '/icons/rider-192.png',
+  '/icons/rider-512.png',
+  '/icons/driver-192.png',
+  '/icons/driver-512.png',
 ];
 
 // Install event - cache core assets
