@@ -145,7 +145,12 @@ The admin actions publish release metadata or request a Vercel deployment. New c
 3. Set the planned launch date and time using your local timezone.
 4. Turn on **Enable coming soon** and save. Visitors to the Rider (`/`) and Driver (`/drivers`) URLs see the launch countdown and waitlist instead of the apps. The admin console remains available.
 5. Turn the setting off and save when the apps are ready for public access.
-6. The waitlist panel shows submitted email addresses and can export them as CSV. Waitlist entries are stored in the existing platform settings table; only administrator accounts can list or export them.
+6. Open **Mailbox → Waitlist** to review submitted email addresses and join times or export them as CSV. Waitlist entries and personalized drafts are stored in the existing platform settings table; only administrator accounts can list, draft, or export them.
+
+### Managing the Waitlist Mailbox
+1. In **Mailbox → Waitlist**, select recipients and create a personalized draft using `{{email}}`, `{{joinedDate}}`, and `{{joinedAt}}`.
+2. Review the per-recipient previews before saving. Saved drafts can be loaded and edited later.
+3. Sending is intentionally unavailable until a sender email and delivery provider are configured. Inbox, outbox, general drafts, and compose are also disabled; saving a personalized draft does not send email.
 
 ### Configuring Geoapify Maps
 1. Create a Geoapify account and an API key at [geoapify.com](https://www.geoapify.com/).

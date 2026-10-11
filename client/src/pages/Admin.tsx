@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { MapView } from "@/components/Map";
+import AdminMailbox from "@/components/AdminMailbox";
 import { BulkDocumentReview, CommissionHistory, SandboxPaymentTest } from "@/components/AdminEnhancements";
 import { PricingRulesManager } from "@/components/PricingRulesManager";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ArrowRight, Bike, CalendarClock, Check, ChevronRight, CircleAlert, CreditCard, Download, FileCheck2, KeyRound, LayoutDashboard, LockKeyhole, Mail as MailIcon, MapPin, Navigation, Plus, Rocket, ShieldCheck, Users, WalletCards, X } from "lucide-react";
+import { ArrowRight, Bike, CalendarClock, Check, ChevronRight, CircleAlert, CreditCard, Download, FileCheck2, KeyRound, LayoutDashboard, LockKeyhole, Mail as MailboxIcon, Mail as MailIcon, MapPin, Navigation, Plus, Rocket, ShieldCheck, Users, WalletCards, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
 
-type Section = "overview" | "drivers" | "finance" | "admins" | "mail" | "releases" | "launch";
+type Section = "overview" | "drivers" | "finance" | "admins" | "messages" | "mailbox" | "releases" | "launch";
 const money = (kobo: number) => `₦${Math.round(kobo / 100).toLocaleString("en-NG")}`;
 
 function Mark() { return <div className="flex items-center gap-2"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f4b942] text-[#113a3b]"><Navigation className="h-5 w-5 fill-current" /></div><div><div className="text-[16px] font-black tracking-[-0.06em] text-[#113a3b]">Kkary</div><div className="text-[8px] font-black uppercase tracking-[0.15em] text-[#7e9691]">Admin console</div></div></div>; }
@@ -47,7 +47,7 @@ function InitialAdminSetup({ username: currentUsername, onDone }: { username: st
 }
 
 function Sidebar({ active, setActive, role }: { active: Section; setActive: (section: Section) => void; role: string }) {
-  const items = [{ id: "overview" as const, label: "Overview", icon: LayoutDashboard }, { id: "drivers" as const, label: "Driver review", icon: FileCheck2 }, { id: "finance" as const, label: "Pricing & share", icon: WalletCards }, { id: "mail" as const, label: "Messages", icon: MailIcon }, ...(role === "admin" || role === "super_admin" ? [{ id: "launch" as const, label: "Launch page", icon: CalendarClock }, { id: "releases" as const, label: "App releases", icon: Rocket }] : []), ...(role === "super_admin" ? [{ id: "admins" as const, label: "Administrators", icon: Users }] : [])];
+  const items = [{ id: "overview" as const, label: "Overview", icon: LayoutDashboard }, { id: "drivers" as const, label: "Driver review", icon: FileCheck2 }, { id: "finance" as const, label: "Pricing & share", icon: WalletCards }, { id: "messages" as const, label: "User messages", icon: MailIcon }, ...(role === "admin" || role === "super_admin" ? [{ id: "mailbox" as const, label: "Mailbox", icon: MailboxIcon }, { id: "launch" as const, label: "Launch page", icon: CalendarClock }, { id: "releases" as const, label: "App releases", icon: Rocket }] : []), ...(role === "super_admin" ? [{ id: "admins" as const, label: "Administrators", icon: Users }] : [])];
   return <aside className="hidden w-[250px] shrink-0 border-r border-[#dcebe5] bg-white p-5 lg:block"><Mark /><div className="mt-10 space-y-1">{items.map(item => <button key={item.id} onClick={() => setActive(item.id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-bold transition-all ${active === item.id ? "bg-[#e7f4ee] text-[#2f7e70]" : "text-[#78918d] hover:bg-[#f3f8f5]"}`}><item.icon className="h-4 w-4" /> {item.label}</button>)}</div><div className="mt-auto pt-44"><div className="rounded-2xl bg-[#f3f8f5] p-4"><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#548278]"><ShieldCheck className="h-4 w-4" /> Protected</div><p className="mt-2 text-[11px] leading-relaxed text-[#7d9591]">Every review and revenue change is recorded in the audit log.</p></div></div></aside>;
 }
 
@@ -139,7 +139,7 @@ function toLocalDateTime(value: string | null | undefined) {
   return local.toISOString().slice(0, 16);
 }
 
-function LaunchPageSettings() {
+function LaunchPageSettings({ onOpenMailbox }: { onOpenMailbox: () => void }) {
   const utils = trpc.useUtils();
   const status = trpc.operations.launchStatus.useQuery();
   const waitlist = trpc.operations.launchWaitlist.useQuery();
@@ -160,21 +160,6 @@ function LaunchPageSettings() {
     setEnabled(status.data.enabled);
     setLaunchAt(toLocalDateTime(status.data.launchAt));
   }, [status.data?.enabled, status.data?.launchAt]);
-
-  const exportWaitlist = () => {
-    const entries = waitlist.data ?? [];
-    const csv = ["Email,Joined at", ...entries.map(entry => {
-      const safeEmail = `"${entry.email.replaceAll('"', '""')}"`;
-      const joinedAt = `"${new Date(entry.joinedAt).toISOString()}"`;
-      return `${safeEmail},${joinedAt}`;
-    })].join("\r\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "kkar-launch-waitlist.csv";
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
 
   return <div className="space-y-6">
     <div>
@@ -209,23 +194,10 @@ function LaunchPageSettings() {
       </CardContent>
     </Card>
     <Card className="rounded-[26px] border-[#e0ece8]">
-      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
-        <div><CardTitle className="text-base text-[#193d3c]">Launch waitlist</CardTitle><p className="mt-1 text-xs text-[#89a19d]">People who asked to hear when Kkar launches.</p></div>
-        <div className="flex items-center gap-2">
-          <Badge className="bg-[#e6f5ee] text-[#3a8c78] hover:bg-[#e6f5ee]">{waitlist.data?.length ?? 0} joined</Badge>
-          <Button variant="outline" size="sm" disabled={!waitlist.data?.length} onClick={exportWaitlist} className="rounded-lg border-[#dcebe5]"><Download className="mr-2 h-3.5 w-3.5" /> Export CSV</Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {waitlist.isLoading ? <p className="text-sm text-[#809792]">Loading waitlist…</p>
-          : waitlist.error ? <p className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">{waitlist.error.message}</p>
-          : waitlist.data?.length ? <div className="max-h-[360px] overflow-auto rounded-xl border border-[#e4efeb]">
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-[#f5faf7] text-[10px] font-black uppercase tracking-wide text-[#819a95]"><tr><th className="px-4 py-3">Email</th><th className="px-4 py-3">Joined</th></tr></thead>
-              <tbody>{waitlist.data.map(entry => <tr key={entry.email} className="border-t border-[#edf3f0] text-[#456660]"><td className="px-4 py-3">{entry.email}</td><td className="px-4 py-3 text-xs text-[#819a95]">{new Date(entry.joinedAt).toLocaleString()}</td></tr>)}</tbody>
-            </table>
-          </div>
-          : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-8 text-center text-sm text-[#87a09a]">No one has joined the waitlist yet.</div>}
+      <CardHeader><CardTitle className="text-base text-[#193d3c]">Launch waitlist mailbox</CardTitle></CardHeader>
+      <CardContent className="flex flex-wrap items-center justify-between gap-4">
+        <p className="text-sm text-[#78918e]">{waitlist.isLoading ? "Loading waitlist…" : waitlist.error ? waitlist.error.message : `${waitlist.data?.length ?? 0} people have joined. View recipients and prepare a personalized announcement in Mailbox.`}</p>
+        <Button onClick={onOpenMailbox} className="rounded-xl bg-[#113a3b] text-white hover:bg-[#1e5555]"><MailboxIcon className="mr-2 h-4 w-4" /> Open mailbox</Button>
       </CardContent>
     </Card>
   </div>;
@@ -354,5 +326,46 @@ export default function Admin() {
   if (!user || !["admin", "super_admin", "customer_care"].includes(user.role)) return <Login />;
   const canManageReleases = user.role === "admin" || user.role === "super_admin";
   const canManageLaunch = user.role === "admin" || user.role === "super_admin";
-  return <div className="flex min-h-screen bg-[#f5fbf8]">{user.mustChangePassword && <InitialAdminSetup username={user.username || ""} onDone={async () => { await logout(); window.location.replace("/admin"); }} />}<Sidebar active={section} setActive={setSection} role={user.role} /><main className="min-w-0 flex-1"><header className="flex items-center justify-between border-b border-[#dcebe5] bg-white px-5 py-4 lg:px-8"><div className="flex items-center gap-3 lg:hidden"><Mark /></div><div className="hidden text-[11px] font-bold text-[#78918e] lg:block">Kkary / ADMIN / {section.toUpperCase()}</div><div className="flex items-center gap-3">{canInstall && <Button size="sm" onClick={installApp} className="rounded-lg bg-[#4ea88e] text-white hover:bg-[#3d9178]"><Download className="mr-2 h-4 w-4" /> Install Console</Button>}<div className="hidden items-center gap-2 rounded-full bg-[#eef7f3] px-3 py-2 text-[10px] font-bold text-[#4a7c72] sm:flex"><span className="h-2 w-2 rounded-full bg-[#4ea88e]" /> {user.name || user.username}</div><Button variant="ghost" size="sm" onClick={() => logout()} className="text-xs text-[#78918e]">Sign out</Button></div></header><div className="border-b border-[#e4efeb] bg-white px-5 py-3 lg:hidden"><div className="flex gap-2 overflow-x-auto">{(["overview", "drivers", "finance", "mail", ...(canManageLaunch ? ["launch" as const] : []), ...(canManageReleases ? ["releases" as const] : []), ...(user.role === "super_admin" ? ["admins" as const] : [])] as Section[]).map(item => <button key={item} onClick={() => setSection(item)} className={`shrink-0 rounded-xl px-3 py-2 text-[11px] font-bold capitalize ${section === item ? "bg-[#113a3b] text-white" : "bg-[#f1f7f4] text-[#78918e]"}`}>{item === "launch" ? "Launch page" : item}</button>)}</div></div><div className="mx-auto max-w-[1320px] p-5 lg:p-8">{section === "overview" ? <Overview /> : section === "drivers" ? <DriverReview /> : section === "finance" ? <Finance /> : section === "mail" ? <Mail /> : section === "launch" && canManageLaunch ? <LaunchPageSettings /> : section === "releases" && canManageReleases ? <AppReleases /> : section === "admins" && user.role === "super_admin" ? <Admins /> : <Overview />}</div></main></div>;
+  const mobileSections: Section[] = [
+    "overview",
+    "drivers",
+    "finance",
+    "messages",
+    ...(canManageLaunch ? ["mailbox" as const, "launch" as const] : []),
+    ...(canManageReleases ? ["releases" as const] : []),
+    ...(user.role === "super_admin" ? ["admins" as const] : []),
+  ];
+  return (
+    <div className="flex min-h-screen bg-[#f5fbf8]">
+      {user.mustChangePassword && <InitialAdminSetup username={user.username || ""} onDone={async () => { await logout(); window.location.replace("/admin"); }} />}
+      <Sidebar active={section} setActive={setSection} role={user.role} />
+      <main className="min-w-0 flex-1">
+        <header className="flex items-center justify-between border-b border-[#dcebe5] bg-white px-5 py-4 lg:px-8">
+          <div className="flex items-center gap-3 lg:hidden"><Mark /></div>
+          <div className="hidden text-[11px] font-bold text-[#78918e] lg:block">Kkary / ADMIN / {section.toUpperCase()}</div>
+          <div className="flex items-center gap-3">
+            {canInstall && <Button size="sm" onClick={installApp} className="rounded-lg bg-[#4ea88e] text-white hover:bg-[#3d9178]"><Download className="mr-2 h-4 w-4" /> Install Console</Button>}
+            <div className="hidden items-center gap-2 rounded-full bg-[#eef7f3] px-3 py-2 text-[10px] font-bold text-[#4a7c72] sm:flex"><span className="h-2 w-2 rounded-full bg-[#4ea88e]" /> {user.name || user.username}</div>
+            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-xs text-[#78918e]">Sign out</Button>
+          </div>
+        </header>
+        <div className="border-b border-[#e4efeb] bg-white px-5 py-3 lg:hidden">
+          <div className="flex gap-2 overflow-x-auto">
+            {mobileSections.map(item => <button key={item} onClick={() => setSection(item)} className={`shrink-0 rounded-xl px-3 py-2 text-[11px] font-bold ${section === item ? "bg-[#113a3b] text-white" : "bg-[#f1f7f4] text-[#78918e]"}`}>{item === "launch" ? "Launch page" : item === "mailbox" ? "Mailbox" : item === "messages" ? "User messages" : item}</button>)}
+          </div>
+        </div>
+        <div className="mx-auto max-w-[1320px] p-5 lg:p-8">
+          {section === "overview" ? <Overview />
+            : section === "drivers" ? <DriverReview />
+              : section === "finance" ? <Finance />
+                : section === "messages" ? <Mail />
+                  : section === "mailbox" && canManageLaunch ? <AdminMailbox />
+                    : section === "launch" && canManageLaunch ? <LaunchPageSettings onOpenMailbox={() => setSection("mailbox")} />
+                      : section === "releases" && canManageReleases ? <AppReleases />
+                        : section === "admins" && user.role === "super_admin" ? <Admins />
+                          : <Overview />}
+        </div>
+      </main>
+    </div>
+  );
 }

@@ -30,6 +30,7 @@ const draftPricing: Record<"bike" | "car", Pricing> = {
 const appReleaseSettingKey = "app_release";
 const launchModeSettingKey = "launch_mode";
 const launchWaitlistKeyPrefix = "launch_waitlist:";
+const launchWaitlistDraftPrefix = "launch_waitlist_draft:";
 
 type LaunchMode = {
   enabled: boolean;
@@ -570,7 +571,10 @@ export const appRouter = router({
   operations: router({
     launchStatus: publicProcedure.query(async () => {
       const db = await getDb();
-      return db ? getLaunchMode(db) : defaultLaunchMode;
+      if (!db) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Launch status is temporarily unavailable." });
+      }
+      return getLaunchMode(db);
     }),
     joinLaunchWaitlist: publicProcedure.input(z.object({
       email: z.string().trim().email().max(320).transform(value => value.toLowerCase()),
@@ -583,10 +587,7 @@ export const appRouter = router({
         settingKey,
         textValue: input.email,
         updatedBy: null,
-      }).onConflictDoUpdate({
-        target: platformSettings.settingKey,
-        set: { textValue: input.email, updatedBy: null, updatedAt: new Date() },
-      });
+      }).onConflictDoNothing();
       return { success: true } as const;
     }),
     saveLaunchMode: adminProcedure.input(z.object({
@@ -626,6 +627,77 @@ export const appRouter = router({
         .where(like(platformSettings.settingKey, `${launchWaitlistKeyPrefix}%`))
         .orderBy(desc(platformSettings.updatedAt));
       return entries.flatMap(entry => entry.email ? [{ email: entry.email, joinedAt: entry.joinedAt }] : []);
+    }),
+    saveWaitlistDraft: adminProcedure.input(z.object({
+      subject: z.string().trim().min(1).max(255),
+      body: z.string().trim().min(1).max(10000),
+      recipients: z.array(z.string().trim().email().max(320).transform(value => value.toLowerCase())).min(1).max(1000),
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const recipients = [...new Set(input.recipients)];
+      const draftId = crypto.randomUUID();
+      await db.insert(platformSettings).values({
+        settingKey: `${launchWaitlistDraftPrefix}${draftId}`,
+        textValue: JSON.stringify({ id: draftId, subject: input.subject, body: input.body, recipients }),
+        updatedBy: ctx.user.id,
+      });
+      await db.insert(auditLogs).values({
+        actorUserId: ctx.user.id,
+        action: "launch_waitlist_draft_saved",
+        entityType: "platform_setting",
+        entityId: draftId,
+        metadata: JSON.stringify({ recipientCount: recipients.length }),
+      });
+      return { id: draftId, subject: input.subject, recipientCount: recipients.length } as const;
+    }),
+    launchWaitlistDrafts: adminProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const rows = await db.select({
+        textValue: platformSettings.textValue,
+        updatedAt: platformSettings.updatedAt,
+      }).from(platformSettings)
+        .where(like(platformSettings.settingKey, `${launchWaitlistDraftPrefix}%`))
+        .orderBy(desc(platformSettings.updatedAt));
+      const schema = z.object({
+        id: z.string().uuid(),
+        subject: z.string(),
+        body: z.string(),
+        recipients: z.array(z.string().email()),
+      });
+      return rows.map(row => {
+        if (!row.textValue) throw new Error("A saved waitlist draft has no content.");
+        let value: unknown;
+        try {
+          value = JSON.parse(row.textValue);
+        } catch {
+          throw new Error("A saved waitlist draft is malformed.");
+        }
+        const parsed = schema.safeParse(value);
+        if (!parsed.success) throw new Error("A saved waitlist draft is invalid.");
+        return { ...parsed.data, updatedAt: row.updatedAt };
+      });
+    }),
+    removeLaunchWaitlistEntries: adminProcedure.input(z.object({
+      emails: z.array(z.string().trim().email().max(320).transform(value => value.toLowerCase())).min(1).max(500),
+    })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database is not configured");
+      const emails = [...new Set(input.emails)];
+      const settingKeys = emails.map(email => `${launchWaitlistKeyPrefix}${crypto.createHash("sha256").update(email).digest("hex")}`);
+      const existing = await db.select({ settingKey: platformSettings.settingKey })
+        .from(platformSettings)
+        .where(inArray(platformSettings.settingKey, settingKeys));
+      await db.delete(platformSettings).where(inArray(platformSettings.settingKey, settingKeys));
+      await db.insert(auditLogs).values({
+        actorUserId: ctx.user.id,
+        action: "launch_waitlist_entries_removed",
+        entityType: "platform_setting",
+        entityId: launchWaitlistKeyPrefix,
+        metadata: JSON.stringify({ count: existing.length }),
+      });
+      return { removedCount: existing.length } as const;
     }),
     appRelease: publicProcedure.query(async () => {
       const db = await getDb();
