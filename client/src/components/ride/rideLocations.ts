@@ -44,6 +44,10 @@ type GeoapifyRouteResponse = {
 
 const centerAkwaIbom: Coordinate = { lat: 5.03, lng: 7.91 };
 const akwaIbomRect = "7.25,4.3,8.6,5.7";
+export const akwaIbomMapBounds: [Coordinate, Coordinate] = [
+  { lat: 4.3, lng: 7.25 },
+  { lat: 5.7, lng: 8.6 },
+];
 
 function isRoutePosition(value: unknown): value is [number, number] {
   return Array.isArray(value)
@@ -196,7 +200,7 @@ export async function getRouteEstimate(
 export function geoapifyTileUrl() {
   const key = getGeoapifyApiKey();
   if (!key) return null;
-  return `https://maps.geoapify.com/v1/tile/osm-carto/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(key)}`;
+  return `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(key)}`;
 }
 
 export function defaultMapCenter(): Coordinate {

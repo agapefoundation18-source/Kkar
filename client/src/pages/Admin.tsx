@@ -9,45 +9,84 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ArrowRight, Bike, CalendarClock, Check, ChevronRight, CircleAlert, CreditCard, Download, FileCheck2, KeyRound, LayoutDashboard, LockKeyhole, Mail as MailboxIcon, Mail as MailIcon, MapPin, Navigation, Plus, Rocket, ShieldCheck, Users, WalletCards, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Bike, CalendarClock, Check, ChevronRight, CircleAlert, CreditCard, Download, FileCheck2, KeyRound, LayoutDashboard, Mail as MailboxIcon, Mail as MailIcon, MapPin, Navigation, Plus, Rocket, ShieldCheck, Users, WalletCards, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
 
-type Section = "overview" | "drivers" | "finance" | "admins" | "messages" | "mailbox" | "releases" | "launch";
+type Section = "overview" | "drivers" | "finance" | "admins" | "messages" | "mailbox" | "releases" | "launch" | "profile";
 const money = (kobo: number) => `₦${Math.round(kobo / 100).toLocaleString("en-NG")}`;
 
 function Mark() { return <div className="flex items-center gap-2"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f4b942] text-[#113a3b]"><Navigation className="h-5 w-5 fill-current" /></div><div><div className="text-[16px] font-black tracking-[-0.06em] text-[#113a3b]">Kkary</div><div className="text-[8px] font-black uppercase tracking-[0.15em] text-[#7e9691]">Admin console</div></div></div>; }
 
 function Login() {
-  const utils = trpc.useUtils();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const login = trpc.admin.login.useMutation({
-    onSuccess: async result => {
-      await utils.auth.me.invalidate();
+    onSuccess: result => {
       toast.success(result.mustChangePassword ? "Welcome. Secure your account to continue." : "Welcome back");
+      window.location.replace("/admin");
     },
     onError: error => toast.error(error.message),
   });
   return <div className="flex min-h-screen items-center justify-center bg-[#eef7f3] px-5"><div className="w-full max-w-[420px] rounded-[30px] border border-[#dcebe5] bg-white p-8 shadow-[0_25px_70px_rgba(20,70,65,0.12)]"><Mark /><div className="mt-10"><div className="mb-2 text-[10px] font-black uppercase tracking-[0.17em] text-[#5e948b]">Restricted access</div><h1 className="text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Sign in to Admin.</h1></div><form autoComplete="off" onSubmit={event => { event.preventDefault(); login.mutate({ username, password }); }} className="mt-7 space-y-4"><label className="block"><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.13em] text-[#809a94]">Username</span><Input name="admin-login-username" value={username} onChange={event => setUsername(event.target.value)} className="h-12 rounded-xl border-[#dcebe5]" autoComplete="off" /></label><label className="block"><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.13em] text-[#809a94]">Password</span><Input name="admin-login-password" value={password} onChange={event => setPassword(event.target.value)} type="password" className="h-12 rounded-xl border-[#dcebe5]" autoComplete="new-password" /></label><Button disabled={login.isPending || !username.trim() || !password} className="h-13 mt-3 w-full rounded-xl bg-[#113a3b] text-white hover:bg-[#1e5555]">{login.isPending ? "Checking…" : "Enter console"}<ArrowRight className="ml-auto h-4 w-4" /></Button></form></div></div>;
 }
 
-function InitialAdminSetup({ username: currentUsername, onDone }: { username: string; onDone: () => Promise<void> }) {
-  const change = trpc.admin.completeInitialSetup.useMutation({
+function ProfileManagement({ username }: { username: string }) {
+  const utils = trpc.useUtils();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const change = trpc.admin.changePassword.useMutation({
     onSuccess: async () => {
-      toast.success("Credentials updated. Sign in with your new username and password.");
-      await onDone();
+      await utils.auth.me.invalidate();
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password updated successfully.");
     },
     onError: error => toast.error(error.message),
   });
-  const [username, setUsername] = useState(currentUsername);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#103839]/60 px-5 backdrop-blur-sm"><div className="w-full max-w-[440px] rounded-[28px] bg-white p-7 shadow-2xl"><div className="flex items-start justify-between"><div><div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-[#c0851d]"><KeyRound className="h-4 w-4" /> Action required</div><h2 className="text-2xl font-black tracking-[-0.05em] text-[#173b3b]">Secure your account</h2></div><LockKeyhole className="h-5 w-5 text-[#658e88]" /></div><p className="mt-3 text-sm leading-relaxed text-[#7d9490]">Choose a new administrator username and password before using the console.</p><form autoComplete="off" onSubmit={event => { event.preventDefault(); change.mutate({ currentPassword, username, newPassword }); }} className="mt-6 space-y-4"><label className="block"><span className="mb-1.5 block text-xs font-bold text-[#67837d]">Current username</span><Input name="admin-new-username" autoComplete="off" value={username} onChange={event => setUsername(event.target.value)} placeholder="Administrator username" className="h-12 rounded-xl" /></label><Input name="admin-current-password" type="password" autoComplete="new-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} placeholder="Current password" className="h-12 rounded-xl" /><Input name="admin-new-password" type="password" autoComplete="new-password" value={newPassword} onChange={event => setNewPassword(event.target.value)} placeholder="New password (10+ characters)" className="h-12 rounded-xl" /><Button disabled={change.isPending || username.trim().length < 3 || !currentPassword || newPassword.length < 10} className="h-12 w-full rounded-xl bg-[#113a3b] text-white">{change.isPending ? "Saving…" : "Update username and password"}</Button></form></div></div>;
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error("The new passwords do not match.");
+      return;
+    }
+    change.mutate({ currentPassword, newPassword });
+  };
+  return <div className="max-w-2xl space-y-6">
+    <div>
+      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Account / Profile management</div>
+      <h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Manage your profile.</h1>
+      <p className="mt-2 text-sm text-[#7b9490]">Signed in as <span className="font-bold text-[#42635e]">{username}</span>. Update your password here.</p>
+    </div>
+    <Card className="rounded-[26px] border-[#e0ece8]">
+      <CardHeader><CardTitle className="text-base text-[#193d3c]">Change password</CardTitle></CardHeader>
+      <CardContent>
+        <form autoComplete="off" onSubmit={submit} className="space-y-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-bold text-[#67837d]">Current password</span>
+            <Input name="admin-profile-current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} className="h-12 rounded-xl" required />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-bold text-[#67837d]">New password</span>
+            <Input name="admin-profile-new-password" type="password" autoComplete="new-password" value={newPassword} onChange={event => setNewPassword(event.target.value)} placeholder="At least 10 characters" minLength={10} maxLength={128} className="h-12 rounded-xl" required />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-bold text-[#67837d]">Confirm new password</span>
+            <Input name="admin-profile-confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} minLength={10} maxLength={128} className="h-12 rounded-xl" required />
+          </label>
+          <Button disabled={change.isPending || !currentPassword || newPassword.length < 10 || !confirmPassword} className="h-12 rounded-xl bg-[#113a3b] px-5 text-white hover:bg-[#1e5555]">
+            {change.isPending ? "Saving…" : "Update password"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  </div>;
 }
 
 function Sidebar({ active, setActive, role }: { active: Section; setActive: (section: Section) => void; role: string }) {
-  const items = [{ id: "overview" as const, label: "Overview", icon: LayoutDashboard }, { id: "drivers" as const, label: "Driver review", icon: FileCheck2 }, { id: "finance" as const, label: "Pricing & share", icon: WalletCards }, { id: "messages" as const, label: "User messages", icon: MailIcon }, ...(role === "admin" || role === "super_admin" ? [{ id: "mailbox" as const, label: "Mailbox", icon: MailboxIcon }, { id: "launch" as const, label: "Launch page", icon: CalendarClock }, { id: "releases" as const, label: "App releases", icon: Rocket }] : []), ...(role === "super_admin" ? [{ id: "admins" as const, label: "Administrators", icon: Users }] : [])];
+  const items = [{ id: "overview" as const, label: "Overview", icon: LayoutDashboard }, { id: "drivers" as const, label: "Driver review", icon: FileCheck2 }, { id: "finance" as const, label: "Pricing & share", icon: WalletCards }, { id: "messages" as const, label: "User messages", icon: MailIcon }, ...(role === "admin" || role === "super_admin" ? [{ id: "mailbox" as const, label: "Mailbox", icon: MailboxIcon }, { id: "launch" as const, label: "Launch page", icon: CalendarClock }, { id: "releases" as const, label: "App releases", icon: Rocket }] : []), ...(role === "super_admin" ? [{ id: "admins" as const, label: "Administrators", icon: Users }] : []), { id: "profile" as const, label: "Profile management", icon: KeyRound }];
   return <aside className="hidden w-[250px] shrink-0 border-r border-[#dcebe5] bg-white p-5 lg:block"><Mark /><div className="mt-10 space-y-1">{items.map(item => <button key={item.id} onClick={() => setActive(item.id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-bold transition-all ${active === item.id ? "bg-[#e7f4ee] text-[#2f7e70]" : "text-[#78918d] hover:bg-[#f3f8f5]"}`}><item.icon className="h-4 w-4" /> {item.label}</button>)}</div><div className="mt-auto pt-44"><div className="rounded-2xl bg-[#f3f8f5] p-4"><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#548278]"><ShieldCheck className="h-4 w-4" /> Protected</div><p className="mt-2 text-[11px] leading-relaxed text-[#7d9591]">Every review and revenue change is recorded in the audit log.</p></div></div></aside>;
 }
 
@@ -334,10 +373,10 @@ export default function Admin() {
     ...(canManageLaunch ? ["mailbox" as const, "launch" as const] : []),
     ...(canManageReleases ? ["releases" as const] : []),
     ...(user.role === "super_admin" ? ["admins" as const] : []),
+    "profile",
   ];
   return (
     <div className="flex min-h-screen bg-[#f5fbf8]">
-      {user.mustChangePassword && <InitialAdminSetup username={user.username || ""} onDone={async () => { await logout(); window.location.replace("/admin"); }} />}
       <Sidebar active={section} setActive={setSection} role={user.role} />
       <main className="min-w-0 flex-1">
         <header className="flex items-center justify-between border-b border-[#dcebe5] bg-white px-5 py-4 lg:px-8">
@@ -349,9 +388,16 @@ export default function Admin() {
             <Button variant="ghost" size="sm" onClick={() => logout()} className="text-xs text-[#78918e]">Sign out</Button>
           </div>
         </header>
+        {user.mustChangePassword && <div className="border-b border-[#f0d68c] bg-[#fff8df] px-5 py-3 lg:px-8">
+          <button type="button" onClick={() => setSection("profile")} className="flex w-full items-center gap-2 text-left text-sm font-bold text-[#765816] hover:text-[#5c4210]">
+            <CircleAlert className="h-4 w-4 shrink-0" />
+            <span>Password should be changed.</span>
+            <span className="ml-auto inline-flex items-center gap-1 underline underline-offset-2">Open Profile management <ChevronRight className="h-4 w-4" /></span>
+          </button>
+        </div>}
         <div className="border-b border-[#e4efeb] bg-white px-5 py-3 lg:hidden">
           <div className="flex gap-2 overflow-x-auto">
-            {mobileSections.map(item => <button key={item} onClick={() => setSection(item)} className={`shrink-0 rounded-xl px-3 py-2 text-[11px] font-bold ${section === item ? "bg-[#113a3b] text-white" : "bg-[#f1f7f4] text-[#78918e]"}`}>{item === "launch" ? "Launch page" : item === "mailbox" ? "Mailbox" : item === "messages" ? "User messages" : item}</button>)}
+            {mobileSections.map(item => <button key={item} onClick={() => setSection(item)} className={`shrink-0 rounded-xl px-3 py-2 text-[11px] font-bold ${section === item ? "bg-[#113a3b] text-white" : "bg-[#f1f7f4] text-[#78918e]"}`}>{item === "launch" ? "Launch page" : item === "mailbox" ? "Mailbox" : item === "messages" ? "User messages" : item === "profile" ? "Profile" : item}</button>)}
           </div>
         </div>
         <div className="mx-auto max-w-[1320px] p-5 lg:p-8">
@@ -363,6 +409,7 @@ export default function Admin() {
                     : section === "launch" && canManageLaunch ? <LaunchPageSettings onOpenMailbox={() => setSection("mailbox")} />
                       : section === "releases" && canManageReleases ? <AppReleases />
                         : section === "admins" && user.role === "super_admin" ? <Admins />
+                          : section === "profile" ? <ProfileManagement username={user.username || ""} />
                           : <Overview />}
         </div>
       </main>

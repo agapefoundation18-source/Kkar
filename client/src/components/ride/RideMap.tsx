@@ -17,20 +17,31 @@ const markerIcon = (color: string) =>
 const pickupIcon = markerIcon("#16866d");
 const destinationIcon = markerIcon("#f4b942");
 const driverIcon = markerIcon("#2769c9");
+const userLocationIcon = L.divIcon({
+  className: "",
+  html: '<span style="display:block;width:24px;height:24px;border:3px solid white;border-radius:50%;background:#2878e0;box-shadow:0 0 0 7px #2878e044,0 2px 8px #102a2c88"></span>',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+});
 
 function MapInteraction({
   target,
   onSelect,
   focus,
   fit,
+  initialBounds,
+  userLocation,
 }: {
   target: "pickup" | "destination" | null;
   onSelect?: (target: "pickup" | "destination", point: Coordinate) => void;
   focus: Coordinate;
   fit: Coordinate[];
+  initialBounds?: [Coordinate, Coordinate];
+  userLocation?: Coordinate | null;
 }) {
   const map = useMap();
   const fitKey = fit.map(point => `${point.lat},${point.lng}`).join(";");
+  const boundsKey = initialBounds?.map(point => `${point.lat},${point.lng}`).join(";");
   useMapEvents({
     click(event) {
       if (target && onSelect) {
@@ -41,10 +52,16 @@ function MapInteraction({
   useEffect(() => {
     if (fit.length > 1) {
       map.fitBounds(fit.map(point => [point.lat, point.lng]), { padding: [32, 32], maxZoom: 15 });
+    } else if (fit.length === 1) {
+      map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 13), { duration: 0.5 });
+    } else if (initialBounds) {
+      map.fitBounds(initialBounds.map(point => [point.lat, point.lng]), { padding: [24, 24], maxZoom: 10 });
+    } else if (userLocation) {
+      map.flyTo([userLocation.lat, userLocation.lng], 14, { duration: 0.8 });
     } else {
       map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 13), { duration: 0.5 });
     }
-  }, [fitKey, focus.lat, focus.lng, map]);
+  }, [boundsKey, fitKey, focus.lat, focus.lng, initialBounds, map, userLocation?.lat, userLocation?.lng]);
   useEffect(() => {
     const timer = window.setTimeout(() => map.invalidateSize(), 100);
     return () => window.clearTimeout(timer);
@@ -56,8 +73,11 @@ export function RideMap({
   pickup,
   destination,
   driver,
+  userLocation,
   route,
   center,
+  initialBounds,
+  initialZoom = 13,
   selectionTarget = null,
   onSelectLocation,
   className = "h-[320px]",
@@ -65,8 +85,11 @@ export function RideMap({
   pickup?: Place | null;
   destination?: Place | null;
   driver?: (Coordinate & { name?: string | null }) | null;
+  userLocation?: Coordinate | null;
   route?: Coordinate[];
   center: Coordinate;
+  initialBounds?: [Coordinate, Coordinate];
+  initialZoom?: number;
   selectionTarget?: "pickup" | "destination" | null;
   onSelectLocation?: (target: "pickup" | "destination", point: Coordinate) => void;
   className?: string;
@@ -83,7 +106,7 @@ export function RideMap({
   return (
     <div className={`relative z-0 overflow-hidden rounded-[24px] ${className}`}>
       {tileUrl ? (
-        <MapContainer center={[center.lat, center.lng]} zoom={13} scrollWheelZoom className="h-full w-full">
+        <MapContainer center={[center.lat, center.lng]} zoom={initialZoom} scrollWheelZoom className="h-full w-full">
           <TileLayer
             attribution='&copy; <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">Geoapify</a> | &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>'
             url={tileUrl}
@@ -94,6 +117,8 @@ export function RideMap({
             onSelect={onSelectLocation}
             focus={focus}
             fit={fitPoints}
+            initialBounds={initialBounds}
+            userLocation={userLocation}
           />
           {routePositions.length > 1 && (
             <Polyline positions={routePositions} pathOptions={{ color: "#167c6a", weight: 5, opacity: 0.8 }} />
@@ -111,6 +136,11 @@ export function RideMap({
           {driver && (
             <Marker position={[driver.lat, driver.lng]} icon={driverIcon}>
               <Popup>{driver.name || "Your driver"}</Popup>
+            </Marker>
+          )}
+          {userLocation && (
+            <Marker position={[userLocation.lat, userLocation.lng]} icon={userLocationIcon} zIndexOffset={1000}>
+              <Popup>You are here</Popup>
             </Marker>
           )}
         </MapContainer>

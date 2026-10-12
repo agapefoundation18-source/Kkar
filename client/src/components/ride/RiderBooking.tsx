@@ -5,7 +5,7 @@ import { formatNaira } from "@shared/rideMath";
 import { supabase } from "@/lib/supabase";
 import { RideMap } from "./RideMap";
 import { RouteDirections } from "./RouteDirections";
-import { defaultMapCenter, getRouteEstimate, isInsideServiceArea, reverseGeocode, searchPlaces, type Place, type RouteEstimate } from "./rideLocations";
+import { akwaIbomMapBounds, defaultMapCenter, getRouteEstimate, isInsideServiceArea, reverseGeocode, searchPlaces, type Place, type RouteEstimate } from "./rideLocations";
 
 type VehicleType = "bike" | "car";
 type RideStatus = "matching" | "driver_assigned" | "driver_en_route" | "driver_arrived" | "trip_started" | "trip_completed" | "cancelled_by_rider" | "cancelled_by_driver" | "cancelled_no_driver";
@@ -142,11 +142,46 @@ export function RiderBooking() {
   const [vehicleType, setVehicleType] = useState<VehicleType>("bike");
   const [selectionTarget, setSelectionTarget] = useState<"pickup" | "destination">("pickup");
   const [mapCenter, setMapCenter] = useState<Coordinate>(defaultCenter);
+  const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
+  const [locationNotice, setLocationNotice] = useState("");
   const [activeRide, setActiveRide] = useState<ActiveRide | null>(null);
   const [loadingRide, setLoadingRide] = useState(true);
   const [requesting, setRequesting] = useState(false);
   const [error, setError] = useState("");
   const [locationBusy, setLocationBusy] = useState(false);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationNotice("Location is unavailable on this device. The map is showing Akwa Ibom.");
+      return;
+    }
+
+    let active = true;
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        if (!active) return;
+        const point = { lat: position.coords.latitude, lng: position.coords.longitude };
+        if (!isInsideServiceArea(point)) {
+          setLocationNotice("Your location is outside the current service area. The map is showing Akwa Ibom.");
+          return;
+        }
+        setUserLocation(point);
+        setMapCenter(point);
+        setLocationNotice("");
+      },
+      cause => {
+        if (!active) return;
+        setLocationNotice(cause.code === cause.PERMISSION_DENIED
+          ? "Allow location access to pin your position. You can still explore the Akwa Ibom map."
+          : "Your location could not be determined. You can still explore the Akwa Ibom map.");
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+    );
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const loadActiveRide = useCallback(async () => {
     const { data, error: rpcError } = await supabase.rpc("get_my_active_ride");
@@ -369,9 +404,12 @@ export function RiderBooking() {
         const point = { lat: position.coords.latitude, lng: position.coords.longitude };
         if (!isInsideServiceArea(point)) {
           setLocationBusy(false);
+          setLocationNotice("Your location is outside the current service area. Rides are currently available in Akwa Ibom.");
           setError("Kkar rides are currently available only in Akwa Ibom. Search for a pickup there instead.");
           return;
         }
+        setUserLocation(point);
+        setLocationNotice("");
         setMapCenter(point);
         void reverseGeocode(point)
           .then(label => {
@@ -542,6 +580,7 @@ export function RiderBooking() {
               pickup={activePickup}
               destination={activeDestination}
               driver={driverLocation}
+              userLocation={userLocation}
               route={route?.path}
               center={activePickup ?? mapCenter}
               className="h-[300px]"
@@ -578,12 +617,21 @@ export function RiderBooking() {
             <RideMap
               pickup={pickup}
               destination={destination}
+              userLocation={userLocation}
               center={mapCenter}
+              initialBounds={akwaIbomMapBounds}
+              initialZoom={9}
               route={route?.path}
               selectionTarget={selectionTarget}
               onSelectLocation={selectMapPoint}
-              className="h-[300px]"
+              className="h-[min(58vh,520px)] min-h-[340px]"
             />
+            {locationNotice && (
+              <div role="status" className="mt-3 flex items-start gap-2 rounded-xl bg-[#f2f8f5] p-3 text-xs text-[#567770]">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#34796e]" />
+                {locationNotice}
+              </div>
+            )}
             {route && <RouteDirections steps={route.steps} className="mt-3" />}
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button

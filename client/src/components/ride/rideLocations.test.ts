@@ -19,7 +19,7 @@ describe("Geoapify ride locations", () => {
 
   it("builds a Geoapify tile URL when the client API key is configured", () => {
     vi.stubEnv("VITE_GEOAPIFY_API_KEY", "test-key");
-    expect(geoapifyTileUrl()).toContain("maps.geoapify.com/v1/tile/osm-carto/");
+    expect(geoapifyTileUrl()).toContain("maps.geoapify.com/v1/tile/osm-bright/");
     expect(geoapifyTileUrl()).toContain("apiKey=test-key");
     expect(getGeoapifyApiKey()).toBe("test-key");
   });
