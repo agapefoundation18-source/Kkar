@@ -1,36 +1,24 @@
 import { trpc } from "@/lib/trpc";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { RefreshCw, Smartphone } from "lucide-react";
 
 export function AppUpdateCard({ variant = "rider" }: { variant?: "rider" | "driver" }) {
-  const { data: release, isLoading, error } = trpc.operations.appRelease.useQuery(undefined, {
+  const { data: release, isLoading } = trpc.operations.appRelease.useQuery(undefined, {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
-  const buildStorageKey = `kkar-${variant}-installed-build`;
-  const [installedBuildId, setInstalledBuildId] = useState(() => {
-    const storedBuildId = window.localStorage.getItem(buildStorageKey);
-    if (storedBuildId) return storedBuildId;
-    window.localStorage.setItem(buildStorageKey, __KKAR_BUILD_ID__);
-    return __KKAR_BUILD_ID__;
-  });
+  const buildStorageKey = `kkary-${variant}-seen-release`;
+  const [seenReleaseId, setSeenReleaseId] = useState(() => window.localStorage.getItem(buildStorageKey));
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState("");
   const dark = variant === "driver";
-  useEffect(() => {
-    if (release && !release.promptForUpdate) {
-      window.localStorage.setItem(buildStorageKey, __KKAR_BUILD_ID__);
-      setInstalledBuildId(__KKAR_BUILD_ID__);
-    }
-  }, [buildStorageKey, release?.releaseId, release?.promptForUpdate]);
   const isOutdated = Boolean(
-    release?.version &&
-      release.buildId &&
-      release.promptForUpdate &&
-      release.buildId !== installedBuildId,
+    release?.promptForUpdate &&
+      release.releaseId &&
+      release.releaseId !== seenReleaseId,
   );
 
-  if (isLoading || error || !isOutdated || !release) return null;
+  if (isLoading || !isOutdated || !release) return null;
 
   const installUpdate = async () => {
     setUpdating(true);
@@ -79,8 +67,8 @@ export function AppUpdateCard({ variant = "rider" }: { variant?: "rider" | "driv
           await controllerChanged;
         }
       }
-      window.localStorage.setItem(buildStorageKey, release.buildId);
-      setInstalledBuildId(release.buildId);
+      window.localStorage.setItem(buildStorageKey, release.releaseId);
+      setSeenReleaseId(release.releaseId);
       window.location.reload();
     } catch (cause) {
       setUpdateError(cause instanceof Error ? cause.message : "Unable to check for the update.");
@@ -97,7 +85,7 @@ export function AppUpdateCard({ variant = "rider" }: { variant?: "rider" | "driv
         <div className="min-w-0 flex-1">
           <h2 className="font-black">Kkary {variant === "driver" ? "Driver" : "Rider"} update available</h2>
           <p className={`mt-1 text-sm ${dark ? "text-gray-300" : "text-[#718c86]"}`}>
-            Version {release.version} is ready to install.
+            {release.updateType === "deployment" ? "A new app update is ready to install." : `Version ${release.version} is ready to install.`}
           </p>
           {release.notes && <p className={`mt-2 whitespace-pre-wrap text-sm ${dark ? "text-gray-200" : "text-[#597872]"}`}>{release.notes}</p>}
           <button

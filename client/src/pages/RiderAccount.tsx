@@ -807,6 +807,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
               <button onClick={() => goTo("earn")} className="ml-auto rounded-xl bg-[#f4b942] p-2.5 text-[#12393a]" aria-label="Earn with Kkary"><ArrowRight className="h-4 w-4" /></button>
             </div>
           </SectionCard>
+          <AppUpdateCard />
           <button onClick={() => { clearFeedback(); setLogoutOpen(true); }} className="w-full rounded-2xl border border-[#eed7d3] bg-white px-4 py-3.5 text-sm font-black text-[#a7473d]">
             Log out
           </button>
@@ -926,7 +927,6 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
 
       {page === "settings" && (
         <div className="space-y-4">
-          <AppUpdateCard />
           <SectionCard>
             <div className="divide-y divide-[#edf3f1]">
               <ListItem icon={ShieldCheck} title="Sign in & security" detail="Passkeys and account password" onClick={() => goTo("security")} />

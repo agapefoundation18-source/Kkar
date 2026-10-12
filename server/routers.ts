@@ -156,6 +156,7 @@ type AppRelease = {
   releaseId: string;
   publishedAt: string;
   promptForUpdate: boolean;
+  updateType: "version" | "deployment";
 };
 
 async function getAppRelease(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
@@ -178,6 +179,7 @@ async function getAppRelease(db: NonNullable<Awaited<ReturnType<typeof getDb>>>)
     releaseId: z.string(),
     publishedAt: z.string(),
     promptForUpdate: z.boolean().default(true),
+    updateType: z.enum(["version", "deployment"]).default("version"),
   });
   const result = releaseSchema.safeParse(value);
   if (!result.success) throw new Error("The published app release setting is invalid.");
@@ -775,7 +777,7 @@ export const appRouter = router({
           });
         }
         const previous = await getAppRelease(db);
-        if (previous && compareSemanticVersions(input.version, previous.version) <= 0) {
+        if (previous?.version && compareSemanticVersions(input.version, previous.version) <= 0) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: `Version ${input.version} must be newer than ${previous.version}.`,
@@ -788,6 +790,7 @@ export const appRouter = router({
           releaseId: crypto.randomUUID(),
           publishedAt: new Date().toISOString(),
           promptForUpdate: true,
+          updateType: "version",
         };
         await saveAppRelease(db, release, ctx.user.id);
         await db.insert(auditLogs).values({
@@ -811,18 +814,25 @@ export const appRouter = router({
         });
       }
       const previous = await getAppRelease(db);
-      if (previous) {
-        const release = { ...previous, promptForUpdate: false };
-        await saveAppRelease(db, release, ctx.user.id);
-      }
+      const releaseId = crypto.randomUUID();
+      const release: AppRelease = {
+        version: previous?.version ?? "",
+        buildId: currentBuildId() ?? previous?.buildId ?? releaseId,
+        notes: "A new Kkary app update is available.",
+        releaseId,
+        publishedAt: new Date().toISOString(),
+        promptForUpdate: true,
+        updateType: "deployment",
+      };
+      await saveAppRelease(db, release, ctx.user.id);
       await db.insert(auditLogs).values({
         actorUserId: ctx.user.id,
         action: "app_deployment_published",
         entityType: "app_release",
-        entityId: previous?.releaseId ?? "unversioned",
-        metadata: JSON.stringify({ version: previous?.version ?? null }),
+        entityId: release.releaseId,
+        metadata: JSON.stringify({ version: release.version || null, updateType: release.updateType }),
       });
-      return { success: true } as const;
+      return { success: true, release } as const;
     }),
     snapshot: adminProcedure.query(async () => getOperationsSnapshot()),
     liveDrivers: adminProcedure.query(async () => {

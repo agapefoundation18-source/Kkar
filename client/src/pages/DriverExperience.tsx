@@ -249,6 +249,15 @@ export function DriverExperience() {
     }
   };
 
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      alert(`Unable to sign out: ${error.message}`);
+      return;
+    }
+    setSession(null);
+  };
+
   if (!isStandalone && !isWebAuthFlow) return <DriverLandingPage />;
 
   if (!sessionReady) {
@@ -533,10 +542,7 @@ export function DriverExperience() {
             {unreadMailCount > 0 && <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{unreadMailCount}</span>}
           </button>
           <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              setSession(null);
-            }}
+            onClick={() => void handleSignOut()}
             className="p-2 hover:bg-gray-800 rounded-lg"
           >
             <X className="w-6 h-6" />
@@ -574,6 +580,13 @@ export function DriverExperience() {
           <div className="space-y-4 p-4">
             <h2 className="text-2xl font-bold">Settings</h2>
             <AppUpdateCard variant="driver" />
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              className="w-full rounded-xl border border-red-500/30 px-4 py-3 text-sm font-bold text-red-300"
+            >
+              Log out
+            </button>
           </div>
         ) : currentTab === "home" ? (
           <DriverDispatch />

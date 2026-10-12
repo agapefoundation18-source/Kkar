@@ -137,12 +137,13 @@ To expire sessions after about two months of inactivity, set the Supabase projec
 
 ### Publishing App Updates
 1. Open **App releases** in the admin console.
-2. Choose **Publish new version** for an update that should show an Update button to older rider and driver PWAs. Enter a newer semantic version (for example `1.2.0`) and optional release notes.
-3. Choose **Publish current changes** for a routine deployment that should not show a new update prompt. This requires `VERCEL_DEPLOY_HOOK_URL` to be set as a server-side Vercel environment variable.
-4. The rider PWA is installed from `/`; the driver PWA is installed from `/drivers`. They use separate manifests and start screens.
-5. Existing installs should be removed and reinstalled from the correct page after the new icons/manifests deploy, especially if the previous shortcut showed browser branding or opened in a browser tab.
+2. Choose **Publish new version** to publish a semantic version and optional release notes. Riders and drivers who have not acknowledged that update see an Update button in their account.
+3. Choose **Publish update** for a routine deployment without changing the app version. This requests a Vercel deployment and publishes the same account update notice. It requires `VERCEL_DEPLOY_HOOK_URL` as a server-side Vercel environment variable.
+4. The update button appears in the Rider account just below **Earn with Kkary**, and in the Driver account just above **Log out**. It stays hidden unless an update has been published and disappears for each user after they install it.
+5. The rider PWA is installed from `/`; the driver PWA is installed from the Driver hostname. They use separate manifests and start screens.
+6. Existing installs should be removed and reinstalled from the correct page after the new icons/manifests deploy, especially if the previous shortcut showed browser branding or opened in a browser tab.
 
-The admin actions publish release metadata or request a Vercel deployment. New code still has to be deployed first for a version release to identify its build. Automatic deployment on every code edit requires connecting the Vercel project to the Git repository and enabling production deployments from the desired branch. Direct local edits are not deployed automatically.
+The admin actions publish release metadata or request a Vercel deployment. New code still has to be deployed before users can receive it. Automatic deployment on every code edit requires connecting the Vercel project to the Git repository and enabling production deployments from the desired branch. Direct local edits are not deployed automatically.
 
 ### Managing the Coming Soon Page
 1. Sign in at `/admin`. The first-time administrator setup requires a new username and password; after saving, you are signed out and must sign in again with the new credentials.

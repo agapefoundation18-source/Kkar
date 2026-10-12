@@ -107,7 +107,7 @@ function AppReleases() {
   });
   const publishDeployment = trpc.operations.publishCurrentDeployment.useMutation({
     onSuccess: async () => {
-      toast.success("Vercel accepted the deployment request");
+      toast.success("Deployment requested and an app update notice was published");
       await utils.operations.releaseStatus.invalidate();
       await utils.operations.appRelease.invalidate();
     },
@@ -119,16 +119,21 @@ function AppReleases() {
     <div>
       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Admin / App releases</div>
       <h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Publish app changes.</h1>
-      <p className="mt-2 text-sm text-[#7b9490]">Choose whether this deployment is a versioned app update or a routine publish.</p>
+      <p className="mt-2 text-sm text-[#7b9490]">Publish a versioned update or deploy the current changes; either action shows an update button in rider and driver accounts.</p>
     </div>
     <Card className="rounded-[26px] border-[#e0ece8]">
       <CardHeader><CardTitle className="text-base text-[#193d3c]">Current published version</CardTitle></CardHeader>
       <CardContent>
-        {currentRelease
+        {status.error
+          ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert">
+            <p>Could not load release status: {status.error.message}</p>
+            <Button type="button" variant="outline" onClick={() => void status.refetch()} className="mt-3 rounded-xl">Retry</Button>
+          </div>
+          : currentRelease
           ? <div className="rounded-2xl bg-[#edf7f2] p-4 text-sm text-[#436e65]">
-            <div className="font-black">Version {currentRelease.version}</div>
+            <div className="font-black">{currentRelease.updateType === "deployment" ? "Routine app update" : `Version ${currentRelease.version}`}</div>
             <div className="mt-1 text-xs">Published {new Date(currentRelease.publishedAt).toLocaleString()}</div>
-            <div className="mt-2 text-xs">{currentRelease.promptForUpdate ? "Update prompt enabled for this version." : "Routine publish; no update prompt will be shown."}</div>
+            <div className="mt-2 text-xs">{currentRelease.promptForUpdate ? "Update button is visible to users who have not installed this update." : "No update is currently published to users."}</div>
           </div>
           : <p className="text-sm text-[#7b9490]">{status.isLoading ? "Loading release status…" : "No app version has been published yet."}</p>}
       </CardContent>
@@ -145,23 +150,25 @@ function AppReleases() {
             <Button disabled={publishVersion.isPending || !version.trim()} className="h-11 w-full rounded-xl bg-[#113a3b] text-white">
               {publishVersion.isPending ? "Publishing…" : "Publish new version"}
             </Button>
+            {publishVersion.error && <p className="mt-3 text-sm text-red-700" role="alert">{publishVersion.error.message}</p>}
           </form>
-          <p className="mt-3 text-xs leading-relaxed text-[#809792]">Outdated installed apps will see an Update button in Settings. The version must be newer than the last published version.</p>
+          <p className="mt-3 text-xs leading-relaxed text-[#809792]">Riders and drivers who have not installed this published update will see an Update button in their account. The version must be newer than the last published version.</p>
         </CardContent>
       </Card>
       <Card className="rounded-[26px] border-[#e0ece8]">
         <CardHeader><CardTitle className="text-base text-[#193d3c]">Just publish</CardTitle></CardHeader>
         <CardContent>
-          <p className="text-sm leading-relaxed text-[#78918e]">Request a Vercel deployment without publishing a new app version or showing a new update prompt.</p>
+          <p className="text-sm leading-relaxed text-[#78918e]">Request a Vercel deployment without changing the app version. Riders and drivers will see an update button in their account until they install it.</p>
           <Button
             onClick={() => publishDeployment.mutate()}
             disabled={publishDeployment.isPending || !status.data?.deployHookConfigured}
             className="mt-5 h-11 w-full rounded-xl bg-[#4ea88e] text-white hover:bg-[#3d9178]"
           >
             <Rocket className="mr-2 h-4 w-4" />
-            {publishDeployment.isPending ? "Requesting deployment…" : "Publish current changes"}
+            {publishDeployment.isPending ? "Requesting deployment…" : "Publish update"}
           </Button>
-          {!status.data?.deployHookConfigured && (
+          {publishDeployment.error && <p className="mt-3 text-sm text-red-700" role="alert">{publishDeployment.error.message}</p>}
+          {!status.error && !status.isLoading && status.data && !status.data.deployHookConfigured && (
             <p className="mt-3 text-xs leading-relaxed text-[#9a6e22]">Set the server-side VERCEL_DEPLOY_HOOK_URL environment variable to enable this option.</p>
           )}
         </CardContent>
