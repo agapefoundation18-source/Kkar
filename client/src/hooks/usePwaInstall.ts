@@ -5,6 +5,8 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+export type PwaInstallOutcome = "accepted" | "dismissed" | "unavailable";
+
 /**
  * Hook to handle PWA installation prompts
  * Returns the deferredPrompt and install state
@@ -42,27 +44,31 @@ export function usePwaInstall() {
     };
   }, []);
 
-  const installApp = async () => {
+  const installApp = async (): Promise<PwaInstallOutcome> => {
     if (deferredPrompt) {
       await deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       setDeferredPrompt(null);
-      setCanInstall(outcome !== "accepted");
-      return;
+      setCanInstall(outcome === "dismissed");
+      return outcome;
     }
 
     if (window.location.pathname.startsWith("/admin")) {
-      return;
+      return "unavailable";
     }
 
     const isDriverApp = window.location.pathname === "/drivers" || window.location.pathname.startsWith("/drivers/");
     const appName = isDriverApp ? "Kkary Driver" : "Kkary Rider";
-    const isAppleDevice = /iPad|iPhone|iPod|Macintosh/.test(window.navigator.userAgent);
-    window.alert(
-      isAppleDevice
-        ? `To install ${appName}, tap Share in your browser, then choose Add to Home Screen.`
-        : `To install ${appName}, open your browser menu and choose Install app or Add to Home screen.`,
-    );
+    const isIOS = /iPad|iPhone|iPod/.test(window.navigator.userAgent) ||
+      (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+    const isAndroid = /Android/i.test(window.navigator.userAgent);
+    const instructions = isIOS
+      ? `To install ${appName} on iPhone or iPad, open this page in Safari, tap Share, then choose Add to Home Screen.`
+      : isAndroid
+        ? `To install ${appName} on Android, open this page in Chrome, tap the ⋮ menu, then choose Install app or Add to Home screen.`
+        : `To install ${appName} on desktop, use your browser's Install icon or page menu and choose Install ${appName}.`;
+    window.alert(instructions);
+    return "unavailable";
   };
 
   return {

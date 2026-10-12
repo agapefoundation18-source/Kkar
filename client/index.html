@@ -7,8 +7,9 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
     <title>Kkary Rider — local mobility</title>
-    <meta name="theme-color" content="#113a3b" />
-    <meta name="description" content="Kkary — trusted mobility for everyday journeys." />
+    <meta name="theme-color" content="#030A13" />
+    <meta name="description" content="Kkary Rider — Ride Safe. Ride Easy. Book trusted local rides with clear fares and live trip updates." />
+    <meta name="application-name" content="Kkary Rider" />
     <link id="kkary-apple-icon" rel="apple-touch-icon" href="/icons/rider-192.png" />
     
     <!-- PWA Manifest -->
@@ -17,7 +18,6 @@
       document.write(`<link id="kkary-manifest" rel="manifest" href="${isDriverApp ? "/manifest-driver.json" : "/manifest.json"}">`);
     </script>
     <!-- PWA Metadata -->
-    <meta name="application-name" content="Kkary Rider" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Kkary Rider" />
@@ -27,10 +27,12 @@
     <script>
       if (isDriverApp) {
         document.title = "Kkary Driver — local mobility";
+        document.querySelector('meta[name="theme-color"]').content = "#030A13";
         document.querySelector('meta[name="application-name"]').content = "Kkary Driver";
         document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Kkary Driver";
-        document.getElementById("kkary-apple-icon").href = "/icons/driver-192.png";
+        document.getElementById("kkary-apple-icon").href = "/icons/rider-192.png";
       } else {
+        document.querySelector('meta[name="theme-color"]').content = "#030A13";
         document.querySelector('meta[name="application-name"]').content = "Kkary Rider";
         document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Kkary Rider";
         document.getElementById("kkary-apple-icon").href = "/icons/rider-192.png";

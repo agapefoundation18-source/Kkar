@@ -5,7 +5,6 @@ import {
   ChevronRight,
   CircleHelp,
   Clock3,
-  Download,
   Globe2,
   LocateFixed,
   Lock,
@@ -25,11 +24,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { normalizeE164PhoneNumber } from "@/lib/phoneAuth";
 import { supabase } from "@/lib/supabase";
 import { AppUpdateCard } from "@/components/AppUpdateCard";
 import { DriverDispatch } from "@/components/ride/DriverDispatch";
+import DriverLandingPage from "@/pages/DriverLandingPage";
 
 type AuthMode = "signup" | "signin";
 type ActivityTab = "home" | "earnings" | "account";
@@ -58,21 +57,22 @@ const onboardingSlides = [
 ];
 
 export function DriverExperience() {
-  const { canInstall, isInstalled, installApp } = usePwaInstall();
   const isStandalone = useMemo(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true;
   }, []);
+  const requestedAuthMode = new URLSearchParams(window.location.search).get("mode");
+  const isWebAuthFlow = requestedAuthMode === "signin" || requestedAuthMode === "signup" || requestedAuthMode === "app";
 
   const [session, setSession] = useState<Session | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionError, setSessionError] = useState("");
   const [signupVerificationPending, setSignupVerificationPending] = useState(false);
   const [signupCompleted, setSignupCompleted] = useState(false);
-  const [authMode, setAuthMode] = useState<AuthMode>("signin");
+  const [authMode, setAuthMode] = useState<AuthMode>(requestedAuthMode === "signup" ? "signup" : "signin");
   const [activeSlide, setActiveSlide] = useState(() => {
     if (typeof window === "undefined") return 0;
-    return localStorage.getItem("kkary-driver-onboarding-seen") === "true" ? onboardingSlides.length : 0;
+    return isWebAuthFlow || localStorage.getItem("kkary-driver-onboarding-seen") === "true" ? onboardingSlides.length : 0;
   });
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [currentTab, setCurrentTab] = useState<ActivityTab>("home");
@@ -248,22 +248,7 @@ export function DriverExperience() {
     }
   };
 
-  if (!isStandalone) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-black to-gray-900 px-4 pb-24 text-white">
-        <Smartphone className="mb-4 h-16 w-16 text-blue-500" />
-        <h1 className="mb-2 text-3xl font-bold">Kkary Driver</h1>
-        <p className="text-center text-gray-300">Install the Kkary Driver app to start earning.</p>
-        {canInstall && !isInstalled && (
-          <div className="fixed inset-x-0 bottom-0 border-t border-gray-700 bg-gray-950/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <button onClick={installApp} className="w-full rounded-xl bg-blue-600 px-6 py-3.5 font-semibold text-white hover:bg-blue-700">
-              Download Driver App
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
+  if (!isStandalone && !isWebAuthFlow) return <DriverLandingPage />;
 
   if (!sessionReady) {
     return <div className="flex min-h-screen items-center justify-center bg-gray-900 text-sm font-semibold text-white">Restoring your Kkary Driver session…</div>;

@@ -28,6 +28,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
+import RiderLandingPage from "@/pages/RiderLandingPage";
 import { normalizeE164PhoneNumber } from "@/lib/phoneAuth";
 import { hasSupabaseConfig, supabase } from "@/lib/supabase";
 import RiderAccount from "@/pages/RiderAccount";
@@ -788,6 +789,8 @@ export default function RiderExperience() {
     return window.matchMedia("(display-mode: standalone)").matches ||
       Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
   }, []);
+  const requestedAuthMode = new URLSearchParams(window.location.search).get("mode");
+  const isWebAuthFlow = requestedAuthMode === "signin" || requestedAuthMode === "signup" || requestedAuthMode === "app";
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
@@ -825,29 +828,7 @@ export default function RiderExperience() {
     };
   }, []);
 
-  if (!isStandaloneApp) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#123b3a] to-[#0c292c] px-4 pb-28 text-white">
-        <div className="flex h-20 w-20 items-center justify-center rounded-[26px] bg-[#f4b942] text-[#102a2c] shadow-[0_14px_40px_rgba(244,185,66,0.28)]">
-          <Navigation className="h-10 w-10 fill-current" strokeWidth={2.5} />
-        </div>
-        <h1 className="mt-6 text-3xl font-black tracking-tight">Kkary Rider</h1>
-        <p className="mt-2 max-w-sm text-center leading-relaxed text-[#c2ddd7]">
-          Install the Kkary Rider app to book rides and follow your driver.
-        </p>
-        {!isInstalled && (
-          <div className="fixed inset-x-0 bottom-0 border-t border-white/10 bg-[#0c292c]/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <button
-              onClick={installApp}
-              className="w-full rounded-xl bg-[#f4b942] px-6 py-3.5 font-bold text-[#153a3a] hover:bg-[#e8b139]"
-            >
-              Download Rider App
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
+  if (!isStandaloneApp && !isWebAuthFlow) return <RiderLandingPage />;
 
   if (!sessionReady) {
     return <div className="flex min-h-screen items-center justify-center bg-[#0d2d30] text-sm font-semibold text-white">Restoring your Kkar session…</div>;
@@ -862,7 +843,7 @@ export default function RiderExperience() {
     );
   }
 
-  if (isStandaloneApp && session && !signupVerificationPending) {
+  if ((isStandaloneApp || isWebAuthFlow) && session && !signupVerificationPending) {
     return (
       <RiderDashboard
         user={session.user}
@@ -874,14 +855,14 @@ export default function RiderExperience() {
     );
   }
 
-  if (isStandaloneApp && !session && !signupVerificationPending && !hasSeenOnboarding) {
+  if ((isStandaloneApp || isWebAuthFlow) && !session && !signupVerificationPending && !hasSeenOnboarding && !requestedAuthMode) {
     return <OnboardingView onDone={() => { localStorage.setItem("kkar-onboarding-seen", "true"); setHasSeenOnboarding(true); }} />;
   }
 
-  if (isStandaloneApp && (!session || signupVerificationPending)) {
+  if ((isStandaloneApp || isWebAuthFlow) && (!session || signupVerificationPending)) {
     return (
       <AuthExperience
-        initialMode={returningFromLogout ? "signin" : "signup"}
+        initialMode={returningFromLogout || requestedAuthMode === "signin" ? "signin" : "signup"}
         onSignupVerificationPending={setSignupVerificationPending}
         onAuthenticated={() => {
           void supabase.auth.getSession().then(({ data }) => {

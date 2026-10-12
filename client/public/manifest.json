@@ -1,6 +1,6 @@
 {
   "id": "/",
-  "name": "Kkary Rider — Local Mobility",
+  "name": "Kkary Rider",
   "short_name": "Kkary Rider",
   "description": "Book trusted rides across Akwa Ibom with Kkary Rider",
   "start_url": "/",
@@ -8,9 +8,15 @@
   "display_override": ["standalone", "minimal-ui"],
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#ffffff",
-  "theme_color": "#113a3b",
+  "background_color": "#030A13",
+  "theme_color": "#030A13",
   "icons": [
+    {
+      "src": "/icons/kkary-target.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
     {
       "src": "/icons/rider-192.png",
       "sizes": "192x192",

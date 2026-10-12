@@ -1,6 +1,6 @@
 /* Service Worker for Kkary PWA */
 
-const CACHE_NAME = 'kkary-v2';
+const CACHE_NAME = 'kkary-v5';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -8,6 +8,9 @@ const ASSETS_TO_CACHE = [
   '/manifest-driver.json',
   '/icons/rider-192.png',
   '/icons/rider-512.png',
+  '/icons/kkary-target.svg',
+  '/images/rider-landing.png',
+  '/images/driver-landing.png',
   '/icons/driver-192.png',
   '/icons/driver-512.png',
 ];
