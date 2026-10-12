@@ -92,7 +92,7 @@ export function RiderActivity({ onGetHelp }: { onGetHelp: (ride: RideHistoryItem
             <div className="mt-3 flex items-center justify-between border-t border-[#edf3f1] pt-3">
               <span className="inline-flex items-center gap-2 text-xs font-bold text-[#4b706b]">
                 {ride.vehicle_type === "bike" ? <Bike className="h-4 w-4 text-[#c18c1d]" /> : <Car className="h-4 w-4 text-[#c18c1d]" />}
-                {ride.driver?.name || `Kkar ${vehicle}`}
+                {ride.driver?.name || `Kkary ${vehicle}`}
                 {ride.driver?.plate_number ? ` · ${ride.driver.plate_number}` : ""}
               </span>
               <button

@@ -201,11 +201,11 @@ export default function AdminMailbox() {
                 ) : null}
                 <label className="block text-xs font-bold text-[#67837d]">
                   Subject
-                  <Input value={subject} maxLength={255} onChange={event => setSubject(event.target.value)} placeholder="Kkar is getting ready to launch" className="mt-1.5 h-11 rounded-xl" />
+                  <Input value={subject} maxLength={255} onChange={event => setSubject(event.target.value)} placeholder="Kkary is getting ready to launch" className="mt-1.5 h-11 rounded-xl" />
                 </label>
                 <label className="block text-xs font-bold text-[#67837d]">
                   Message
-                  <textarea value={body} maxLength={10000} onChange={event => setBody(event.target.value)} rows={6} placeholder={"Hello {{email}},\n\nThanks for joining the Kkar launch waitlist. We’ll be in touch with more details soon.\n\nThe Kkar team"} className="mt-1.5 w-full rounded-xl border border-[#dcebe5] p-3 text-sm font-normal leading-relaxed text-[#355754] outline-none focus:ring-2 focus:ring-[#91c8b5]" />
+                  <textarea value={body} maxLength={10000} onChange={event => setBody(event.target.value)} rows={6} placeholder={"Hello {{email}},\n\nThanks for joining the Kkary launch waitlist. We’ll be in touch with more details soon.\n\nThe Kkary team"} className="mt-1.5 w-full rounded-xl border border-[#dcebe5] p-3 text-sm font-normal leading-relaxed text-[#355754] outline-none focus:ring-2 focus:ring-[#91c8b5]" />
                 </label>
                 <div className="rounded-xl bg-[#f5faf7] p-3 text-xs leading-relaxed text-[#64807a]">
                   Personalization fields: <code className="rounded bg-white px-1.5 py-0.5">{"{{email}}"}</code>, <code className="rounded bg-white px-1.5 py-0.5">{"{{joinedDate}}"}</code>, and <code className="rounded bg-white px-1.5 py-0.5">{"{{joinedAt}}"}</code>.

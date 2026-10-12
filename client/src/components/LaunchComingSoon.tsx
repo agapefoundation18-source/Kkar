@@ -24,7 +24,7 @@ export default function LaunchComingSoon({ launchAt }: { launchAt: string | null
     onSuccess: () => {
       setJoined(true);
       setEmail("");
-      toast.success("You’re on the Kkar launch list.");
+      toast.success("You’re on the Kkary launch list.");
     },
     onError: error => toast.error(error.message),
   });
@@ -64,7 +64,7 @@ export default function LaunchComingSoon({ launchAt }: { launchAt: string | null
             A better way to move is <span className="text-[#f4c24d]">almost here.</span>
           </h1>
           <p className="mt-6 max-w-[520px] text-base leading-relaxed text-[#bad5d1] sm:text-lg">
-            Kkar is getting ready to connect riders and trusted local drivers across Akwa Ibom. Join the waitlist and we’ll let you know when we launch.
+            Kkary is getting ready to connect riders and trusted local drivers across Akwa Ibom. Join the waitlist and we’ll let you know when we launch.
           </p>
           <div className="mt-9 grid max-w-[540px] grid-cols-4 gap-2.5 sm:gap-3">
             {units.map(unit => (
@@ -88,14 +88,14 @@ export default function LaunchComingSoon({ launchAt }: { launchAt: string | null
           {joined ? (
             <>
               <h2 className="mt-6 text-2xl font-black tracking-[-0.05em]">You’re on the list.</h2>
-              <p className="mt-3 text-sm leading-relaxed text-[#69827d]">Thanks for your interest in Kkar. You’re on the launch list, and the Kkar team will share updates with waitlist members.</p>
+              <p className="mt-3 text-sm leading-relaxed text-[#69827d]">Thanks for your interest in Kkary. You’re on the launch list, and the Kkary team will share updates with waitlist members.</p>
               <Button onClick={() => setJoined(false)} variant="outline" className="mt-6 rounded-xl border-[#dcebe5]">Add another email</Button>
             </>
           ) : (
             <>
               <div className="mt-6 text-[10px] font-black uppercase tracking-[0.16em] text-[#5e948b]">Be first to know</div>
               <h2 className="mt-2 text-2xl font-black tracking-[-0.05em]">Get launch updates.</h2>
-              <p className="mt-3 text-sm leading-relaxed text-[#69827d]">Leave your email to join the launch list. The Kkar team will share launch updates with waitlist members.</p>
+              <p className="mt-3 text-sm leading-relaxed text-[#69827d]">Leave your email to join the launch list. The Kkary team will share launch updates with waitlist members.</p>
               <form onSubmit={event => { event.preventDefault(); joinWaitlist.mutate({ email }); }} className="mt-6 space-y-3">
                 <label htmlFor="launch-email" className="sr-only">Email address</label>
                 <Input
@@ -113,7 +113,7 @@ export default function LaunchComingSoon({ launchAt }: { launchAt: string | null
                   {joinWaitlist.isPending ? "Joining…" : "Join the waitlist"} <ArrowRight className="ml-auto h-4 w-4" />
                 </Button>
               </form>
-              <p className="mt-4 text-[11px] leading-relaxed text-[#91a39f]">By joining, you agree to be contacted by email about the Kkar launch. You can ask to be removed from the list at any time.</p>
+              <p className="mt-4 text-[11px] leading-relaxed text-[#91a39f]">By joining, you agree to be contacted by email about the Kkary launch. You can ask to be removed from the list at any time.</p>
             </>
           )}
         </section>

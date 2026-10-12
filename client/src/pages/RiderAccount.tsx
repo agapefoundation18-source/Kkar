@@ -347,7 +347,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const displayName = name || "Kkar rider";
+  const displayName = name || "Kkary rider";
   const driverUrl = import.meta.env.VITE_KKARY_DRIVER_WEBSITE_URL || "/drivers";
   const resolvedDriverUrl = useMemo(() => new URL(driverUrl, window.location.origin), [driverUrl]);
   const driverUrlIsExternal = resolvedDriverUrl.origin !== window.location.origin;
@@ -364,7 +364,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
           .eq("auth_user_id", user.id)
           .maybeSingle();
         if (profileError) throw profileError;
-        if (!data) throw new Error("Your profile is not initialized. Apply the Kkar Supabase account migration and sign in again.");
+        if (!data) throw new Error("Your profile is not initialized. Apply the Kkary Supabase account migration and sign in again.");
         const profile = data as SavedProfile;
         if (!cancelled) {
           setSettings(profile);
@@ -688,7 +688,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
     }
     const identifier = user.email ? { email: user.email } : user.phone ? { phone: user.phone } : null;
     if (!identifier) {
-      setError("Kkar cannot verify this account with the current sign-in method. Use account recovery to change the password.");
+      setError("Kkary cannot verify this account with the current sign-in method. Use account recovery to change the password.");
       return;
     }
     setBusy(true);
@@ -762,7 +762,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
       : page === "security" ? "Sign in & security"
         : page === "language" ? "Language"
           : page === "privacy" ? "Privacy"
-            : page === "earn" ? "Earn with Kkar"
+            : page === "earn" ? "Earn with Kkary"
               : page === "profile" ? "Profile"
                 : "Settings";
 
@@ -801,10 +801,10 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff3d5] text-[#a97512]"><BriefcaseBusiness className="h-5 w-5" /></span>
               <div>
-                <h2 className="font-black text-[#173b3b]">Earn with Kkar</h2>
+                <h2 className="font-black text-[#173b3b]">Earn with Kkary</h2>
                 <p className="mt-0.5 text-xs text-[#76918b]">Become a driver</p>
               </div>
-              <button onClick={() => goTo("earn")} className="ml-auto rounded-xl bg-[#f4b942] p-2.5 text-[#12393a]" aria-label="Earn with Kkar"><ArrowRight className="h-4 w-4" /></button>
+              <button onClick={() => goTo("earn")} className="ml-auto rounded-xl bg-[#f4b942] p-2.5 text-[#12393a]" aria-label="Earn with Kkary"><ArrowRight className="h-4 w-4" /></button>
             </div>
           </SectionCard>
           <button onClick={() => { clearFeedback(); setLogoutOpen(true); }} className="w-full rounded-2xl border border-[#eed7d3] bg-white px-4 py-3.5 text-sm font-black text-[#a7473d]">
@@ -945,7 +945,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
               <KeyRound className="mt-0.5 h-5 w-5 text-[#398171]" />
               <div>
                 <h2 className="font-black text-[#173b3b]">Passkeys</h2>
-                <p className="mt-1 text-sm leading-relaxed text-[#718c86]">Passkey registration and sign-in aren't available in Kkar's current authentication service. No passkey has been created or stored.</p>
+                <p className="mt-1 text-sm leading-relaxed text-[#718c86]">Passkey registration and sign-in aren't available in Kkary's current authentication service. No passkey has been created or stored.</p>
                 <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#fff3d5] px-3 py-1 text-xs font-bold text-[#8a641e]"><CircleHelp className="h-3.5 w-3.5" /> Not set up</span>
               </div>
             </div>
@@ -970,7 +970,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
               <option value="en">English</option>
             </select>
           </label>
-          <p className="mt-3 text-xs leading-relaxed text-[#718c86]">English is currently Kkar's only available interface language. Your preference is saved to your account.</p>
+          <p className="mt-3 text-xs leading-relaxed text-[#718c86]">English is currently Kkary's only available interface language. Your preference is saved to your account.</p>
         </SectionCard>
       )}
 
@@ -987,7 +987,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
           </SectionCard>
           <SectionCard>
             <h2 className="font-black text-[#a7473d]">Delete account</h2>
-            <p className="mt-2 text-sm leading-relaxed text-[#718c86]">This permanently removes your Kkar sign-in and account settings, saved places, and profile picture. Completed ride records may be retained where needed for legal, safety, or operational obligations. You cannot undo this action. Active rides must be completed or cancelled first.</p>
+            <p className="mt-2 text-sm leading-relaxed text-[#718c86]">This permanently removes your Kkary sign-in and account settings, saved places, and profile picture. Completed ride records may be retained where needed for legal, safety, or operational obligations. You cannot undo this action. Active rides must be completed or cancelled first.</p>
             {!deleteOpen ? (
               <button onClick={() => { clearFeedback(); setDeleteOpen(true); }} className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-[#e8c8c3] px-4 py-3 text-sm font-black text-[#a7473d]"><Trash2 className="h-4 w-4" /> Delete account</button>
             ) : (
@@ -1007,7 +1007,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
       {page === "earn" && (
         <SectionCard>
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#fff3d5] text-[#a97512]"><BriefcaseBusiness className="h-7 w-7" /></div>
-          <h2 className="mt-5 text-2xl font-black tracking-[-0.05em] text-[#12393a]">Earn with Kkar</h2>
+          <h2 className="mt-5 text-2xl font-black tracking-[-0.05em] text-[#12393a]">Earn with Kkary</h2>
           <p className="mt-2 text-sm leading-relaxed text-[#718c86]">Earn according to your own schedule with weekly payouts.</p>
           <a
             href={resolvedDriverUrl.toString()}
@@ -1015,7 +1015,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
             rel={driverUrlIsExternal ? "noopener noreferrer" : undefined}
             className={`${buttonClass} mt-6 w-full`}
           >
-            Become a Kkar driver <ArrowRight className="h-4 w-4" />
+            Become a Kkary driver <ArrowRight className="h-4 w-4" />
           </a>
         </SectionCard>
       )}
@@ -1025,7 +1025,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
           <div className="w-full max-w-sm rounded-[28px] bg-white p-5 shadow-2xl">
             <div className="flex items-start justify-between">
               <div>
-                <h2 id="logout-title" className="text-lg font-black text-[#12393a]">Log out of Kkar?</h2>
+                <h2 id="logout-title" className="text-lg font-black text-[#12393a]">Log out of Kkary?</h2>
                 <p className="mt-2 text-sm text-[#718c86]">You will need to sign in again to use your account.</p>
               </div>
               <button aria-label="Close confirmation" onClick={() => setLogoutOpen(false)} className="rounded-lg p-1 text-[#718c86]"><X className="h-5 w-5" /></button>

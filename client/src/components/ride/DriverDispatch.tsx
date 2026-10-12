@@ -285,7 +285,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
     });
     if (rpcError) throw rpcError;
     setProfile(asDriverProfile(data));
-  }, "Application submitted. Kkar must approve the driver account before rides can be accepted.");
+  }, "Application submitted. Kkary must approve the driver account before rides can be accepted.");
 
   const setAvailability = async (isOnline: boolean) => {
     if (isOnline && !navigator.geolocation) {
@@ -328,7 +328,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
   const acceptRide = (rideId: string) => perform(async () => {
     const { error: rpcError } = await supabase.rpc("accept_ride", { p_ride_id: rideId });
     if (rpcError) throw rpcError;
-  }, "Ride accepted. Contact the rider through Kkar and proceed to the pickup.");
+  }, "Ride accepted. Contact the rider through Kkary and proceed to the pickup.");
 
   const declineRide = (rideId: string) => perform(async () => {
     const { error: rpcError } = await supabase.rpc("decline_ride", { p_ride_id: rideId });
@@ -384,7 +384,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
         <h2 className="text-xl font-bold">{profile?.is_online ? "You're online" : "Driver dispatch"}</h2>
         <p className="mt-1 text-sm text-blue-100">
           {!profile ? "Complete your vehicle application to get started."
-            : !profile.is_approved ? "Your vehicle application is waiting for Kkar approval."
+            : !profile.is_approved ? "Your vehicle application is waiting for Kkary approval."
               : profile.is_online ? "Ride requests for your vehicle will appear here."
                 : "Go online when you're ready to accept rides."}
         </p>
@@ -475,7 +475,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
                   ? <img src={riderAvatarUrls[activeRide.id]} alt={`${activeRide.rider.name || "Rider"} profile`} className="h-12 w-12 rounded-full object-cover" />
                   : <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-700 text-gray-300"><UserRound className="h-6 w-6" /></span>}
                 <div>
-                  <div className="text-sm font-bold">{activeRide.rider.name || "Kkar rider"}</div>
+                  <div className="text-sm font-bold">{activeRide.rider.name || "Kkary rider"}</div>
                   <div className="text-xs text-gray-400">Pickup location shared for this ride</div>
                 </div>
               </div>
@@ -539,7 +539,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
             center={driverLocation}
             className="h-[280px]"
           />
-          <p className="text-xs text-gray-400">Your location is shared with Kkar while you’re online.</p>
+          <p className="text-xs text-gray-400">Your location is shared with Kkary while you’re online.</p>
         </section>
       )}
 
@@ -560,7 +560,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
                   ? <img src={riderAvatarUrls[ride.id]} alt={`${ride.rider?.name || "Rider"} profile`} className="h-12 w-12 rounded-full object-cover" />
                   : <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-700 text-gray-300"><UserRound className="h-6 w-6" /></span>}
                 <div>
-                  <div className="text-sm font-bold">{ride.rider?.name || "Kkar rider"}</div>
+                  <div className="text-sm font-bold">{ride.rider?.name || "Kkary rider"}</div>
                   <div className="text-xs text-gray-400">Pickup point on the map</div>
                 </div>
               </div>

@@ -20,12 +20,12 @@ function Router() {
   const isPublicAppPath = window.location.pathname === "/" || window.location.pathname === "/drivers";
 
   if (isPublicAppPath && launchStatus.isLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#113a3b] text-sm font-semibold text-[#b8d7d2]">Loading Kkar…</div>;
+    return <div className="flex min-h-screen items-center justify-center bg-[#113a3b] text-sm font-semibold text-[#b8d7d2]">Loading Kkary…</div>;
   }
   if (isPublicAppPath && launchStatus.error) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#113a3b] px-5 text-center text-white">
-        <h1 className="text-2xl font-black">Kkar is temporarily unavailable.</h1>
+        <h1 className="text-2xl font-black">Kkary is temporarily unavailable.</h1>
         <p className="max-w-md text-sm text-[#bad5d1]">We couldn’t check the current launch status. Please try again in a moment.</p>
         <Button onClick={() => launchStatus.refetch()} className="rounded-xl bg-[#f4b942] text-[#153a3a] hover:bg-[#e8b139]">Try again</Button>
       </main>

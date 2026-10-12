@@ -325,7 +325,7 @@ function AuthExperience({
       return;
     }
     if (!hasSupabaseConfig) {
-      setError("Kkar sign-in is not configured in this environment. Add the Supabase project URL and anon key to .env.local.");
+      setError("Kkary sign-in is not configured in this environment. Add the Supabase project URL and anon key to .env.local.");
       return;
     }
     if (authMode === "signup" && locationState !== "granted") {
@@ -701,7 +701,7 @@ function RiderDashboard({ user, onSignedOut }: { user: SupabaseUser; onSignedOut
                   </div>
                   <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-[#234d4e]">
                     <Bike className="h-3.5 w-3.5 text-[#f4b942]" />
-                    {selectedRide.driver?.name || `Kkar ${selectedRide.vehicle_type}`}
+                    {selectedRide.driver?.name || `Kkary ${selectedRide.vehicle_type}`}
                   </div>
                 </div>
               )}
@@ -831,7 +831,7 @@ export default function RiderExperience() {
   if (!isStandaloneApp && !isWebAuthFlow) return <RiderLandingPage />;
 
   if (!sessionReady) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#0d2d30] text-sm font-semibold text-white">Restoring your Kkar session…</div>;
+    return <div className="flex min-h-screen items-center justify-center bg-[#0d2d30] text-sm font-semibold text-white">Restoring your Kkary session…</div>;
   }
 
   if (sessionError && !session) {

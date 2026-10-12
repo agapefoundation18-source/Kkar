@@ -378,7 +378,7 @@ export function RiderBooking() {
 
   const selectMapPoint = async (target: "pickup" | "destination", point: Coordinate) => {
     if (!isInsideServiceArea(point)) {
-      setError("Kkar rides are currently available only in Akwa Ibom.");
+      setError("Kkary rides are currently available only in Akwa Ibom.");
       return;
     }
     setMapCenter(point);
@@ -405,7 +405,7 @@ export function RiderBooking() {
         if (!isInsideServiceArea(point)) {
           setLocationBusy(false);
           setLocationNotice("Your location is outside the current service area. Rides are currently available in Akwa Ibom.");
-          setError("Kkar rides are currently available only in Akwa Ibom. Search for a pickup there instead.");
+          setError("Kkary rides are currently available only in Akwa Ibom. Search for a pickup there instead.");
           return;
         }
         setUserLocation(point);
@@ -484,7 +484,7 @@ export function RiderBooking() {
       });
       if (rpcError) throw rpcError;
       const created = asRide(data);
-      if (!created) throw new Error("Kkar couldn't confirm the ride request. Please retry.");
+      if (!created) throw new Error("Kkary couldn't confirm the ride request. Please retry.");
       setActiveRide(created);
       setPickup(null);
       setDestination(null);
@@ -521,7 +521,7 @@ export function RiderBooking() {
     <div className="space-y-4 px-4 pb-4">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#6d9c93]">Kkar rides</div>
+          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#6d9c93]">Kkary rides</div>
           <h2 className="mt-1 text-2xl font-black tracking-[-0.05em] text-[#153b3b]">
             {activeRide ? "Your ride" : "Where are you going?"}
           </h2>
@@ -563,7 +563,7 @@ export function RiderBooking() {
                   ? <img src={driverAvatarUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
                   : <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#dcece6] text-[#38786d]"><UserRound className="h-6 w-6" /></span>}
                 <div>
-                  <div className="text-sm font-black text-[#173d3c]">{activeRide.driver.name || "Kkar driver"}</div>
+                  <div className="text-sm font-black text-[#173d3c]">{activeRide.driver.name || "Kkary driver"}</div>
                   <div className="mt-1 text-xs text-[#66827c]">
                     {[activeRide.driver.vehicle_color, activeRide.driver.vehicle_make, activeRide.driver.vehicle_model].filter(Boolean).join(" ")}
                     {activeRide.driver.plate_number ? ` · ${activeRide.driver.plate_number}` : ""}
