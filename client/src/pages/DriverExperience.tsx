@@ -57,11 +57,12 @@ const onboardingSlides = [
 ];
 
 export function DriverExperience() {
+  const isDriverHost = window.location.hostname === "kkarydriver.aevonindustries.site";
   const isStandalone = useMemo(() => {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true;
   }, []);
-  const requestedAuthMode = new URLSearchParams(window.location.search).get("mode");
+  const requestedAuthMode = isDriverHost ? "app" : new URLSearchParams(window.location.search).get("mode");
   const isWebAuthFlow = requestedAuthMode === "signin" || requestedAuthMode === "signup" || requestedAuthMode === "app";
 
   const [session, setSession] = useState<Session | null>(null);

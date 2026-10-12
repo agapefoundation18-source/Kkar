@@ -11,13 +11,25 @@ import Drivers from "./pages/Drivers";
 import LaunchComingSoon from "./components/LaunchComingSoon";
 import { trpc } from "./lib/trpc";
 import { Button } from "./components/ui/button";
+import { useEffect } from "react";
 
 function Router() {
+  const isDriverHost = window.location.hostname === "kkarydriver.aevonindustries.site";
   const launchStatus = trpc.operations.launchStatus.useQuery(undefined, {
     retry: 2,
     refetchOnWindowFocus: true,
   });
-  const isPublicAppPath = window.location.pathname === "/" || window.location.pathname === "/drivers";
+  const isLegacyDriverPath = !isDriverHost && window.location.pathname === "/drivers";
+  const isPublicAppPath = !isDriverHost && window.location.pathname === "/";
+  useEffect(() => {
+    if (isLegacyDriverPath) {
+      window.location.replace("https://kkarydriver.aevonindustries.site/");
+    }
+  }, [isLegacyDriverPath]);
+
+  if (isLegacyDriverPath) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#113a3b] text-sm font-semibold text-[#b8d7d2]">Opening Kkary Driver…</div>;
+  }
 
   if (isPublicAppPath && launchStatus.isLoading) {
     return <div className="flex min-h-screen items-center justify-center bg-[#113a3b] text-sm font-semibold text-[#b8d7d2]">Loading Kkary…</div>;
@@ -38,7 +50,7 @@ function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={RiderExperience} />
+      <Route path={"/"} component={isDriverHost ? DriverExperience : RiderExperience} />
       <Route path={"/drivers"} component={DriverExperience} />
       <Route path={"/admin"} component={Admin} />
       <Route path={"/404"} component={NotFound} />

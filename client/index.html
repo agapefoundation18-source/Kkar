@@ -14,7 +14,7 @@
     
     <!-- PWA Manifest -->
     <script>
-      const isDriverApp = window.location.pathname === "/drivers" || window.location.pathname.startsWith("/drivers/");
+      const isDriverApp = window.location.hostname === "kkarydriver.aevonindustries.site";
       document.write(`<link id="kkary-manifest" rel="manifest" href="${isDriverApp ? "/manifest-driver.json" : "/manifest.json"}">`);
     </script>
     <!-- PWA Metadata -->
@@ -30,7 +30,7 @@
         document.querySelector('meta[name="theme-color"]').content = "#030A13";
         document.querySelector('meta[name="application-name"]').content = "Kkary Driver";
         document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Kkary Driver";
-        document.getElementById("kkary-apple-icon").href = "/icons/rider-192.png";
+        document.getElementById("kkary-apple-icon").href = "/icons/driver-192.png";
       } else {
         document.querySelector('meta[name="theme-color"]').content = "#030A13";
         document.querySelector('meta[name="application-name"]').content = "Kkary Rider";
@@ -56,7 +56,10 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').then((reg) => {
+          const serviceWorkerPath = window.location.hostname === "kkarydriver.aevonindustries.site"
+            ? "/sw-driver.js"
+            : "/sw.js";
+          navigator.serviceWorker.register(serviceWorkerPath).then((reg) => {
             console.log('Service Worker registered:', reg);
           }).catch((err) => {
             console.log('Service Worker registration failed:', err);

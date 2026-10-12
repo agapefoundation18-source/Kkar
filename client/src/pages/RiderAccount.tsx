@@ -348,7 +348,7 @@ export default function RiderAccount({ user, onSignedOut }: { user: User; onSign
   const [message, setMessage] = useState("");
 
   const displayName = name || "Kkary rider";
-  const driverUrl = import.meta.env.VITE_KKARY_DRIVER_WEBSITE_URL || "/drivers";
+  const driverUrl = import.meta.env.VITE_KKARY_DRIVER_WEBSITE_URL || "https://kkarydriver.aevonindustries.site/";
   const resolvedDriverUrl = useMemo(() => new URL(driverUrl, window.location.origin), [driverUrl]);
   const driverUrlIsExternal = resolvedDriverUrl.origin !== window.location.origin;
 

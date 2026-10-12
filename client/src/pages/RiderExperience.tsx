@@ -892,7 +892,7 @@ export default function RiderExperience() {
             <a href="#how-it-works" className="transition-colors hover:text-white">How it works</a>
             <a href="#apps" className="transition-colors hover:text-white">Apps</a>
             <a href="#safety" className="transition-colors hover:text-white">Safety</a>
-            <a href="/drivers" className="transition-colors hover:text-white">Kkary for Drivers</a>
+            <a href="https://kkarydriver.aevonindustries.site/" className="transition-colors hover:text-white">Become a Kkary Driver</a>
           </nav>
           <div className="hidden items-center gap-3 md:flex">
             {canInstall && !isInstalled && (
@@ -912,7 +912,7 @@ export default function RiderExperience() {
               <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
               <a href="#apps" onClick={() => setMenuOpen(false)}>Apps</a>
               <a href="#safety" onClick={() => setMenuOpen(false)}>Safety</a>
-              <a href="/drivers" onClick={() => setMenuOpen(false)}>Kkary for Drivers</a>
+              <a href="https://kkarydriver.aevonindustries.site/" onClick={() => setMenuOpen(false)}>Become a Kkary Driver</a>
             </div>
           </div>
         )}

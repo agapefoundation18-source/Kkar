@@ -106,13 +106,16 @@ This update implements a comprehensive Uber/Bolt-like ride-sharing platform with
 ### 5. **Routing & URL Structure**
 
 Routes Updated:
-- `/` → RiderExperience (PWA rider app + browser landing page)
-- `/drivers` → DriverExperience (PWA driver app)
+- `https://kkary.aevonindustries.site/` → RiderExperience
+- `https://kkarydriver.aevonindustries.site/` → DriverExperience (auth, then driver dashboard)
+- `/drivers` on the rider host → redirects to the dedicated Driver host
 - `/admin` → Admin console (route-gated, requires admin auth)
 
 **PWA Detection Logic:**
 - Installed app (PWA): Shows onboarding → auth → dashboard (no landing page)
-- Browser visit: Shows marketing landing page with download CTAs
+- Rider browser visit: Shows the Rider landing experience; the Driver host opens Driver auth/app directly.
+
+Rider and Driver have separate host-scoped manifests, icons, service-worker scripts, and cache names. Their installations therefore have independent app identities and caches while using this single codebase.
 
 ### 6. **Rider Account**
 
@@ -125,10 +128,14 @@ The signed-in rider app's bottom navigation includes Home, Activity, and Account
 - Account deletion requires typing `DELETE`, blocks active rides, removes the Supabase Auth user, and signs out after success.
 - Set the server-only `SUPABASE_SERVICE_ROLE_KEY` to enable authenticated server-side account deletion; it is never exposed to the browser.
 - Passkey registration is explicitly reported as unavailable until a WebAuthn/passkey provider is configured. Kkar currently has only English UI copy; the saved language preference is ready to use when additional translations are implemented.
-- Set `VITE_KKARY_DRIVER_WEBSITE_URL` to the deployed Kkar for Drivers website URL. It defaults to `/drivers`.
+- “Become a Kkary Driver” opens `https://kkarydriver.aevonindustries.site/`.
 - Saved-place search and map selection use the existing Google Maps proxy configured by `VITE_FRONTEND_FORGE_API_URL` and `VITE_FRONTEND_FORGE_API_KEY`.
 
 Apply the updated, repeatable `kkar-supabase-schema.sql` in the Supabase SQL editor before using Account persistence, private avatars, or account deletion. It updates the Supabase schema/policies for profiles, saved places, and private avatars.
+
+Apply `supabase/migrations/20261012_driver_identity_and_vehicle_documents.sql` after the existing live-dispatch migrations. It creates a private `driver-documents` bucket and restricted metadata table; drivers can upload/read only their own documents and admins receive five-minute signed review links through the server. The required checklist is driver licence, NIN, plus motorcycle registration and insurance for motorcycles or car registration and insurance for cars. Driver approval, online availability, and ride offers remain unavailable until every required document is verified.
+
+Driver onboarding occurs after Supabase sign-up/sign-in: register a Motorcycle or Car, upload all required documents, wait for document review, then wait for driver approval. No service-role key belongs in the client build; configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` only as server environment variables for admin review.
 
 ### 7. **Database Schema Changes**
 

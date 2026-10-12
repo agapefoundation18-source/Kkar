@@ -16,6 +16,7 @@ import { calculateDriverSplit } from "./fare";
 import { allowedTransitions } from "./rideState";
 import { detectLgaFromCoordinates, getLgas, isValidLga } from "./_core/lga";
 import { compareSemanticVersions, parseSemanticVersion } from "@shared/appRelease";
+import { hasVerifiedDriverDocuments } from "@shared/driverDocuments";
 
 const vehicleType = z.enum(["bike", "car"]);
 const rideStatus = z.enum(["requested", "matching", "driver_assigned", "driver_en_route", "driver_arrived", "trip_started", "trip_completed", "payment_processing", "completed", "cancelled_by_rider", "cancelled_by_driver", "cancelled_no_driver", "payment_failed"]);
@@ -72,6 +73,21 @@ type SupabaseDriverApplication = {
   profiles: { full_name: string; email: string | null } | null;
 };
 
+type SupabaseDriverDocument = {
+  id: string;
+  driver_id: string;
+  document_type: string;
+  original_file_name: string;
+  mime_type: string;
+  verification_status: "pending" | "approved" | "rejected";
+  rejection_reason: string | null;
+  created_at: string;
+  driver_profiles: {
+    vehicle_type: "bike" | "car";
+    profiles: { full_name: string; email: string | null } | null;
+  } | null;
+};
+
 async function supabaseAdminRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const url = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").replace(/\/+$/, "");
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -100,6 +116,37 @@ async function supabaseAdminRequest<T>(path: string, init: RequestInit = {}): Pr
     });
   }
   return response.json() as Promise<T>;
+}
+
+async function createDriverDocumentReviewUrl(documentId: string) {
+  const rows = await supabaseAdminRequest<Array<{ storage_key: string }>>(
+    `driver_documents?select=storage_key&id=eq.${encodeURIComponent(documentId)}`,
+  );
+  const storageKey = rows[0]?.storage_key;
+  if (!storageKey || storageKey.split("/").length < 4 || storageKey.includes("..")) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Driver document was not found." });
+  }
+  const url = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").replace(/\/+$/, "");
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  const safePath = storageKey.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(`${url}/storage/v1/object/sign/driver-documents/${safePath}`, {
+    method: "POST",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ expiresIn: 300 }),
+  });
+  if (!response.ok) {
+    console.error(`[Supabase driver document review] Signed URL request failed with status ${response.status}`);
+    throw new TRPCError({ code: "BAD_GATEWAY", message: "Could not create a secure document review link." });
+  }
+  const result = await response.json() as { signedURL?: string };
+  if (!result.signedURL) {
+    throw new TRPCError({ code: "BAD_GATEWAY", message: "Supabase did not return a document review link." });
+  }
+  return { url: result.signedURL.startsWith("http") ? result.signedURL : `${url}/storage/v1${result.signedURL}` };
 }
 
 type AppRelease = {
@@ -839,9 +886,80 @@ export const appRouter = router({
       );
       return rows;
     }),
+    supabaseDriverDocuments: adminProcedure.query(async () => {
+      const rows = await supabaseAdminRequest<SupabaseDriverDocument[]>(
+        "driver_documents?select=id,driver_id,document_type,original_file_name,mime_type,verification_status,rejection_reason,created_at,driver_profiles(vehicle_type)&verification_status=eq.pending&order=created_at.asc&limit=100",
+      );
+      return rows.map(document => ({
+        id: document.id,
+        driverId: document.driver_id,
+        documentType: document.document_type,
+        fileName: document.original_file_name,
+        mimeType: document.mime_type,
+        createdAt: document.created_at,
+        vehicleType: document.driver_profiles?.vehicle_type ?? null,
+      }));
+    }),
+    supabaseDriverDocumentReviewUrl: adminProcedure
+      .input(z.object({ documentId: z.string().uuid() }))
+      .mutation(({ input }) => createDriverDocumentReviewUrl(input.documentId)),
+    reviewSupabaseDriverDocument: adminProcedure
+      .input(z.object({
+        documentId: z.string().uuid(),
+        decision: z.enum(["approved", "rejected"]),
+        rejectionReason: z.string().trim().max(500).optional(),
+      }).superRefine((input, ctx) => {
+        if (input.decision === "rejected" && !input.rejectionReason) {
+          ctx.addIssue({ code: "custom", message: "Provide a reason when rejecting a document.", path: ["rejectionReason"] });
+        }
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const rows = await supabaseAdminRequest<Array<{ id: string; driver_id: string }>>(
+          `driver_documents?id=eq.${encodeURIComponent(input.documentId)}&verification_status=eq.pending`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              verification_status: input.decision,
+              rejection_reason: input.decision === "rejected" ? input.rejectionReason : null,
+              reviewed_by: String(ctx.user.id),
+              reviewed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }),
+          },
+        );
+        if (rows.length !== 1) {
+          throw new TRPCError({ code: "CONFLICT", message: "This document was already reviewed or no longer exists." });
+        }
+        const db = await getDb();
+        if (db) {
+          await db.insert(auditLogs).values({
+            actorUserId: ctx.user.id,
+            action: `supabase_document_${input.decision}`,
+            entityType: "supabase_driver_document",
+            entityId: input.documentId,
+            metadata: input.decision === "rejected" ? input.rejectionReason : undefined,
+          });
+        }
+        return { success: true } as const;
+      }),
     approveSupabaseDriver: adminProcedure
       .input(z.object({ driverId: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => {
+        const [driver] = await supabaseAdminRequest<Array<{ id: string; vehicle_type: "bike" | "car" }>>(
+          `driver_profiles?select=id,vehicle_type&id=eq.${encodeURIComponent(input.driverId)}&is_approved=eq.false`,
+        );
+        if (!driver) {
+          throw new TRPCError({ code: "CONFLICT", message: "This driver application was already reviewed or no longer exists." });
+        }
+        const documents = await supabaseAdminRequest<Array<{ document_type: string; verification_status: string }>>(
+          `driver_documents?select=document_type,verification_status&driver_id=eq.${encodeURIComponent(input.driverId)}`,
+        );
+        if (!hasVerifiedDriverDocuments(driver.vehicle_type, documents)) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Approve the driver licence, NIN, and required vehicle documents before approving this driver.",
+          });
+        }
         const rows = await supabaseAdminRequest<Array<{ id: string }>>(
           `driver_profiles?id=eq.${encodeURIComponent(input.driverId)}&is_approved=eq.false`,
           { method: "PATCH", body: JSON.stringify({ is_approved: true }) },

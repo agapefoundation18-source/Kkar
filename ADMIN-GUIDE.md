@@ -42,8 +42,13 @@
 - **How to use:**
   1. Login at `/admin` with your admin credentials
   2. Review driver documents in "Driver review" section
-  3. Adjust pricing in "Pricing & share" section
-  4. Read/respond to messages in "Messages" section
+  3. For Kkary app applications, open each private document with its short-lived review link; approve or reject every required item before approving the driver.
+  4. Adjust pricing in "Pricing & share" section
+  5. Read/respond to messages in "Messages" section
+
+Kkary app drivers must submit a driver licence and NIN, plus registration and insurance for their selected Motorcycle or Car. Document approval alone does not approve the driver profile: approve the driver application only after the full checklist is approved. A rejected file can be replaced and returns to pending review. Review links expire after five minutes; document objects remain in the private `driver-documents` bucket.
+
+Before enabling this workflow, apply `supabase/migrations/20261012_driver_identity_and_vehicle_documents.sql` after the existing Supabase live-dispatch migrations. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` only on the server; the admin console uses these to query metadata and mint short-lived signed links. Do not make the document bucket public.
 
 ### 💬 Customer Care Admin
 - **Permissions:**

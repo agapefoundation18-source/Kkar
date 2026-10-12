@@ -1,6 +1,7 @@
 import { AlertCircle, Bike, Car, CheckCircle2, Clock3, LocateFixed, MapPin, Navigation, RefreshCw, ToggleLeft, ToggleRight, UserRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatNaira } from "@shared/rideMath";
+import { DRIVER_DOCUMENT_LABELS, hasVerifiedDriverDocuments, requiredDriverDocuments, type DriverDocumentType } from "@shared/driverDocuments";
 import { supabase } from "@/lib/supabase";
 import { RideMap } from "./RideMap";
 import { RouteDirections } from "./RouteDirections";
@@ -55,6 +56,13 @@ type Application = {
   vehicle_color: string;
   plate_number: string;
 };
+type DriverDocument = {
+  id: string;
+  document_type: DriverDocumentType;
+  original_file_name: string;
+  verification_status: "pending" | "approved" | "rejected";
+  rejection_reason: string | null;
+};
 
 const initialApplication: Application = {
   vehicle_type: "bike",
@@ -94,6 +102,7 @@ function pointPlace(lat: number, lng: number, label: string): Place {
 export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }) {
   const defaultCenter = useMemo(defaultMapCenter, []);
   const [profile, setProfile] = useState<DriverProfile | null>(null);
+  const [documents, setDocuments] = useState<DriverDocument[]>([]);
   const [application, setApplication] = useState(initialApplication);
   const [availableRides, setAvailableRides] = useState<RideRecord[]>([]);
   const [activeRide, setActiveRide] = useState<RideRecord | null>(null);
@@ -123,12 +132,27 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
     const nextProfile = asDriverProfile(profileResult.data);
     const nextRide = asRide(activeResult.data);
     setProfile(nextProfile);
+    let nextDocuments: DriverDocument[] = [];
+    if (nextProfile) {
+      const { data: documentRows, error: documentsError } = await supabase
+        .from("driver_documents")
+        .select("id, document_type, original_file_name, verification_status, rejection_reason")
+        .eq("driver_id", nextProfile.id);
+      if (documentsError) throw documentsError;
+      nextDocuments = Array.isArray(documentRows) ? documentRows as DriverDocument[] : [];
+      setDocuments(nextDocuments);
+    } else {
+      setDocuments([]);
+    }
     setActiveRide(nextRide?.id === dismissedRideId.current ? null : nextRide);
     setHistory(Array.isArray(historyResult.data) ? historyResult.data as DriverHistoryItem[] : []);
     if (nextProfile?.current_lat != null && nextProfile.current_lng != null) {
       setDriverLocation({ lat: Number(nextProfile.current_lat), lng: Number(nextProfile.current_lng) });
     }
-    if (nextProfile?.is_approved && nextProfile.is_online) {
+    const documentsVerified = nextProfile
+      ? hasVerifiedDriverDocuments(nextProfile.vehicle_type, nextDocuments)
+      : false;
+    if (nextProfile?.is_approved && documentsVerified && nextProfile.is_online) {
       const { data, error: ridesError } = await supabase.rpc("list_available_ride_offers");
       if (ridesError) throw ridesError;
       const offers = Array.isArray(data) ? data as RideRecord[] : [];
@@ -285,7 +309,42 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
     });
     if (rpcError) throw rpcError;
     setProfile(asDriverProfile(data));
-  }, "Application submitted. Kkary must approve the driver account before rides can be accepted.");
+  }, "Vehicle registered. Upload your driver licence, NIN and vehicle documents to continue.");
+
+  const uploadDocument = async (documentType: DriverDocumentType, file?: File) => {
+    if (!profile || !file) return;
+    if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(file.type) || file.size > 10 * 1024 * 1024) {
+      setError("Choose a JPG, PNG, WebP or PDF document no larger than 10 MB.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setNotice("");
+    let storageKey = "";
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) throw userError ?? new Error("Sign in again to upload documents.");
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-160) || "document";
+      storageKey = `${userData.user.id}/${profile.id}/${documentType}/${crypto.randomUUID()}-${safeName}`;
+      const { error: storageError } = await supabase.storage
+        .from("driver-documents")
+        .upload(storageKey, file, { contentType: file.type, upsert: false });
+      if (storageError) throw storageError;
+      const { error: submitError } = await supabase.rpc("submit_driver_document", {
+        p_document_type: documentType,
+        p_file_name: file.name.slice(0, 255),
+        p_mime_type: file.type,
+        p_storage_key: storageKey,
+      });
+      if (submitError) throw submitError;
+      setNotice(`${DRIVER_DOCUMENT_LABELS[documentType]} uploaded. It is waiting for admin review.`);
+      await loadState();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Document upload failed.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const setAvailability = async (isOnline: boolean) => {
     if (isOnline && !navigator.geolocation) {
@@ -377,16 +436,19 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
   const destination = activeRide ? pointPlace(activeRide.dropoff_lat, activeRide.dropoff_lng, activeRide.dropoff_address) : null;
   const driver = driverLocation ? { ...driverLocation, name: "Your location" } : null;
   const next = activeRide ? nextStatus[activeRide.status] : undefined;
+  const requiredDocuments = profile ? requiredDriverDocuments(profile.vehicle_type) : [];
+  const identityVerified = profile ? hasVerifiedDriverDocuments(profile.vehicle_type, documents) : false;
 
   return (
     <div className="space-y-4 p-4">
       <div className="rounded-2xl bg-gradient-to-r from-blue-600 to-blue-800 p-5 text-white">
         <h2 className="text-xl font-bold">{profile?.is_online ? "You're online" : "Driver dispatch"}</h2>
         <p className="mt-1 text-sm text-blue-100">
-          {!profile ? "Complete your vehicle application to get started."
-            : !profile.is_approved ? "Your vehicle application is waiting for Kkary approval."
-              : profile.is_online ? "Ride requests for your vehicle will appear here."
-                : "Go online when you're ready to accept rides."}
+          {!profile ? "Complete your vehicle registration to get started."
+            : !identityVerified ? "Upload your identity and vehicle documents. You can go online after Kkary verifies them."
+              : !profile.is_approved ? "Your verified documents are ready for driver approval."
+                : profile.is_online ? "Ride requests for your vehicle will appear here."
+                  : "Go online when you're ready to accept rides."}
         </p>
       </div>
 
@@ -401,7 +463,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
               {profile.is_approved ? "Approved" : "Pending review"}
             </span>
           </div>
-          {profile.is_approved && (
+          {profile.is_approved && identityVerified && (
             <button
               type="button"
               onClick={() => void setAvailability(!profile.is_online)}
@@ -411,6 +473,11 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
               {profile.is_online ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
               {saving ? "Updating…" : profile.is_online ? "Go offline" : "Go online"}
             </button>
+          )}
+          {!identityVerified && (
+            <p className="mt-3 text-xs leading-relaxed text-amber-200">
+              Going online and accepting rides are locked until your driver licence, NIN and required vehicle documents are approved.
+            </p>
           )}
           {profile.is_online && (
             <div className="mt-3 flex items-center gap-2 text-xs text-green-300">
@@ -431,7 +498,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
             onChange={event => setApplication({ ...application, vehicle_type: event.target.value as VehicleType })}
             className="w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white"
           >
-            <option value="bike">Bike</option>
+            <option value="bike">Motorcycle</option>
             <option value="car">Car</option>
           </select>
           {([
@@ -454,6 +521,43 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
             {saving ? "Submitting…" : "Submit for approval"}
           </button>
         </form>
+      )}
+
+      {profile && (
+        <section className="space-y-3 rounded-xl bg-gray-800 p-4">
+          <div>
+            <h3 className="font-bold">Identity and vehicle documents</h3>
+            <p className="mt-1 text-xs leading-relaxed text-gray-400">
+              Upload clear JPG, PNG, WebP or PDF files up to 10 MB. Documents are stored privately and only you and authorized reviewers can access them.
+            </p>
+          </div>
+          {requiredDocuments.map(documentType => {
+            const document = documents.find(item => item.document_type === documentType);
+            return (
+              <label key={documentType} className="block rounded-lg border border-gray-700 bg-gray-900 p-3">
+                <span className="block text-sm font-semibold">{DRIVER_DOCUMENT_LABELS[documentType]}</span>
+                {document ? (
+                  <span className={`mt-1 block text-xs ${document.verification_status === "approved" ? "text-green-300" : document.verification_status === "rejected" ? "text-red-300" : "text-amber-200"}`}>
+                    {document.verification_status === "approved" ? "Verified" : document.verification_status === "rejected" ? `Rejected${document.rejection_reason ? `: ${document.rejection_reason}` : ""}` : "Waiting for review"} · {document.original_file_name}
+                  </span>
+                ) : <span className="mt-1 block text-xs text-gray-400">Required · not uploaded</span>}
+                {document?.verification_status !== "approved" && (
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
+                    disabled={saving}
+                    onChange={event => {
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = "";
+                      void uploadDocument(documentType, file);
+                    }}
+                    className="mt-2 block w-full text-xs text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-700 file:px-3 file:py-2 file:font-semibold file:text-white"
+                  />
+                )}
+              </label>
+            );
+          })}
+        </section>
       )}
 
       {activeRide && (

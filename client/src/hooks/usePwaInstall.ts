@@ -12,6 +12,8 @@ export type PwaInstallOutcome = "accepted" | "dismissed" | "unavailable";
  * Returns the deferredPrompt and install state
  */
 export function usePwaInstall() {
+  const isDriverApp = typeof window !== "undefined" &&
+    window.location.hostname === "kkarydriver.aevonindustries.site";
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -57,7 +59,6 @@ export function usePwaInstall() {
       return "unavailable";
     }
 
-    const isDriverApp = window.location.pathname === "/drivers" || window.location.pathname.startsWith("/drivers/");
     const appName = isDriverApp ? "Kkary Driver" : "Kkary Rider";
     const isIOS = /iPad|iPhone|iPod/.test(window.navigator.userAgent) ||
       (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
