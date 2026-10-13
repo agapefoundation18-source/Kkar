@@ -1,0 +1,6 @@
+The Nigerian states and Local Government Areas in nigeria-states-lgas.json are
+derived from the nigeria-states-lgas dataset by AETech Research Labs:
+https://github.com/aetechlabs/nigeria-states-lgas
+
+The source dataset is distributed under the MIT License, Copyright (c) 2025
+AETech Research Labs. Its license text is available at the repository URL.

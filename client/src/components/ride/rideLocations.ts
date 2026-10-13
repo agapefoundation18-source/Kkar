@@ -1,6 +1,7 @@
 import type { Coordinate } from "@shared/rideMath";
+import { getNigerianLgas, nigeriaStates } from "@shared/nigeriaLocations";
 
-export type Place = Coordinate & { label: string };
+export type Place = Coordinate & { label: string; state?: string; lga?: string };
 export type RouteStep = {
   instruction: string;
   distanceMeters: number;
@@ -13,14 +14,18 @@ export type RouteEstimate = {
   steps: RouteStep[];
 };
 
-type GeoapifyGeocodeResponse = {
-  results?: Array<{
-    formatted?: string;
-    lat?: number;
-    lon?: number;
-    country_code?: string;
-  }>;
+type GeoapifyGeocodeResult = {
+  formatted?: string;
+  lat?: number;
+  lon?: number;
+  country_code?: string;
+  state?: string;
+  county?: string;
+  district?: string;
+  city?: string;
+  suburb?: string;
 };
+type GeoapifyGeocodeResponse = { results?: GeoapifyGeocodeResult[] };
 
 type GeoapifyRouteResponse = {
   features?: Array<{
@@ -42,12 +47,34 @@ type GeoapifyRouteResponse = {
   }>;
 };
 
-const centerAkwaIbom: Coordinate = { lat: 5.03, lng: 7.91 };
-const akwaIbomRect = "7.25,4.3,8.6,5.7";
-export const akwaIbomMapBounds: [Coordinate, Coordinate] = [
-  { lat: 4.3, lng: 7.25 },
-  { lat: 5.7, lng: 8.6 },
-];
+const nigeriaCenter: Coordinate = { lat: 9.08, lng: 7.49 };
+
+function normalizeAreaName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\blocal government area\b|\blga\b|\bstate\b/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function canonicalState(value?: string) {
+  if (!value) return undefined;
+  const normalized = normalizeAreaName(value);
+  if (["fct", "federalcapitalterritory", "abuja"].includes(normalized)) return "FCT";
+  return nigeriaStates.find(state => normalizeAreaName(state) === normalized);
+}
+
+function canonicalLga(state: string | undefined, value?: string) {
+  if (!state || !value) return undefined;
+  const normalized = normalizeAreaName(value);
+  return getNigerianLgas(state).find(lga => normalizeAreaName(lga) === normalized);
+}
+
+function geocodedLga(state: string | undefined, place?: GeoapifyGeocodeResult) {
+  if (!place) return undefined;
+  return canonicalLga(state, place.county)
+    ?? canonicalLga(state, place.district)
+    ?? canonicalLga(state, place.city);
+}
 
 function isRoutePosition(value: unknown): value is [number, number] {
   return Array.isArray(value)
@@ -94,14 +121,19 @@ function geocodeUrl(endpoint: "autocomplete" | "reverse") {
   return url;
 }
 
-export async function searchPlaces(query: string, signal?: AbortSignal): Promise<Place[]> {
+export async function searchPlaces(
+  query: string,
+  signal?: AbortSignal,
+  area?: { state?: string; lga?: string; location?: Coordinate | null },
+): Promise<Place[]> {
   const trimmedQuery = query.trim();
   if (trimmedQuery.length < 3) return [];
 
   const url = geocodeUrl("autocomplete");
-  url.searchParams.set("text", `${trimmedQuery}, Akwa Ibom, Nigeria`);
-  url.searchParams.set("filter", `rect:${akwaIbomRect}|countrycode:ng`);
-  url.searchParams.set("bias", "proximity:7.91,5.03");
+  url.searchParams.set("text", `${trimmedQuery}, Nigeria`);
+  url.searchParams.set("filter", "countrycode:ng");
+  const bias = area?.location ?? nigeriaCenter;
+  url.searchParams.set("bias", `proximity:${bias.lng},${bias.lat}`);
   url.searchParams.set("limit", "6");
   const result = await fetchGeoapify<GeoapifyGeocodeResponse>(url, signal);
   return (result.results ?? [])
@@ -112,19 +144,35 @@ export async function searchPlaces(query: string, signal?: AbortSignal): Promise
       && item.country_code?.toLowerCase() === "ng"
       && isInsideServiceArea({ lat: item.lat!, lng: item.lon! }),
     )
-    .map(item => ({
-      label: item.formatted!.slice(0, 255),
-      lat: item.lat!,
-      lng: item.lon!,
-    }));
+    .map(item => {
+      const state = canonicalState(item.state);
+      return {
+        label: item.formatted!.slice(0, 255),
+        lat: item.lat!,
+        lng: item.lon!,
+        state,
+        lga: geocodedLga(state, item),
+      };
+    });
 }
 
 export async function reverseGeocode(point: Coordinate, signal?: AbortSignal): Promise<string> {
+  const place = await reverseGeocodePlace(point, signal);
+  return place.label;
+}
+
+export async function reverseGeocodePlace(point: Coordinate, signal?: AbortSignal): Promise<Place> {
   const url = geocodeUrl("reverse");
   url.searchParams.set("lat", String(point.lat));
   url.searchParams.set("lon", String(point.lng));
   const result = await fetchGeoapify<GeoapifyGeocodeResponse>(url, signal);
-  return result.results?.[0]?.formatted?.slice(0, 255) || "Pinned map location";
+  const address = result.results?.[0];
+  return {
+    ...point,
+    label: address?.formatted?.slice(0, 255) || "Pinned map location",
+    state: canonicalState(address?.state),
+    lga: geocodedLga(canonicalState(address?.state), address),
+  };
 }
 
 export async function getRouteEstimate(
@@ -204,9 +252,9 @@ export function geoapifyTileUrl() {
 }
 
 export function defaultMapCenter(): Coordinate {
-  return centerAkwaIbom;
+  return nigeriaCenter;
 }
 
 export function isInsideServiceArea(point: Coordinate) {
-  return point.lat >= 4.3 && point.lat <= 5.7 && point.lng >= 7.25 && point.lng <= 8.6;
+  return point.lat >= 4 && point.lat <= 14 && point.lng >= 2 && point.lng <= 15;
 }

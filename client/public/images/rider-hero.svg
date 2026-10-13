@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="760" viewBox="0 0 1000 760" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="500" y1="0" x2="500" y2="650" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101D30"/>
+      <stop offset=".58" stop-color="#101522"/>
+      <stop offset="1" stop-color="#080D14"/>
+    </linearGradient>
+    <linearGradient id="road" x1="510" y1="450" x2="510" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#262A30"/>
+      <stop offset="1" stop-color="#090C11"/>
+    </linearGradient>
+    <linearGradient id="carPaint" x1="230" y1="330" x2="550" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#40464B"/>
+      <stop offset=".2" stop-color="#171B20"/>
+      <stop offset=".68" stop-color="#080B0F"/>
+      <stop offset="1" stop-color="#30363B"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="355" y1="312" x2="500" y2="412" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#426070"/>
+      <stop offset=".48" stop-color="#182531"/>
+      <stop offset="1" stop-color="#080E16"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="812" y1="222" x2="866" y2="307" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A85F3D"/>
+      <stop offset="1" stop-color="#63331F"/>
+    </linearGradient>
+    <radialGradient id="lampGlow" cx="0" cy="0" r="1" gradientTransform="matrix(0 205 -195 0 822 335)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFC947" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#FFC947" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="headlightGlow" cx="0" cy="0" r="1" gradientTransform="matrix(0 88 -120 0 191 513)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD400" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#FFD400" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="blur" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="24"/>
+    </filter>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <path fill="url(#sky)" d="M0 0h1000v760H0z"/>
+  <circle cx="820" cy="327" r="210" fill="url(#lampGlow)"/>
+  <circle cx="173" cy="405" r="175" fill="#D78628" fill-opacity=".09" filter="url(#blur)"/>
+
+  <g fill="#121A27">
+    <path d="M0 306h76v205H0zM64 263h91v248H64zM145 335h78v176h-78zM221 228h107v283H221zM316 296h67v215h-67zM375 251h94v260h-94zM466 327h70v184h-70zM526 238h93v273h-93zM615 290h90v221h-90zM697 212h98v299h-98zM787 279h80v232h-80zM865 238h77v273h-77zM938 312h62v199h-62z"/>
+    <path fill="#1A2430" d="M687 179h117v32H687zM514 207h115v31H514zM212 199h125v29H212zM688 153h16v26h-16zM765 153h16v26h-16zM550 180h15v27h-15zM596 180h15v27h-15z"/>
+  </g>
+  <g fill="#E8A943" opacity=".34">
+    <path d="M85 296h11v17H85zM112 296h11v17h-11zM85 328h11v17H85zM243 259h12v18h-12zM272 259h12v18h-12zM302 259h12v18h-12zM243 294h12v18h-12zM404 280h12v17h-12zM438 280h12v17h-12zM542 264h12v18h-12zM577 264h12v18h-12zM714 245h12v18h-12zM749 245h12v18h-12zM879 266h12v18h-12zM908 266h12v18h-12z"/>
+  </g>
+
+  <path fill="#10151C" d="M0 474c178-40 328-37 493-12 160 24 319 8 507-34v332H0z"/>
+  <path fill="url(#road)" d="M0 487c179-41 329-39 493-13 160 24 319 9 507-33v319H0z"/>
+  <path stroke="#E0A33E" stroke-opacity=".18" stroke-width="3" d="M0 548c212-39 351-29 492-10 167 23 342 6 508-27"/>
+  <path stroke="#E0A33E" stroke-opacity=".13" stroke-width="2" d="M0 610c190-26 360-19 502-4 176 19 336 7 498-14"/>
+  <path fill="#F5BD4C" fill-opacity=".12" d="M615 526h12l70 220h-28zM191 534h9L147 760h-27z"/>
+
+  <g>
+    <path fill="#E0A23A" d="M818 114h8v310h-8z"/>
+    <path fill="#E0A23A" d="M782 114h79v12h-79z"/>
+    <path fill="#FFD36B" d="M800 116h43v12h-43z"/>
+    <circle cx="821" cy="131" r="21" fill="#FFD36B" fill-opacity=".72" filter="url(#blur)"/>
+    <circle cx="821" cy="131" r="8" fill="#FFF0B3"/>
+  </g>
+  <g>
+    <path fill="#A86D31" d="M85 287h7v206h-7z"/>
+    <path fill="#A86D31" d="M57 287h63v9H57z"/>
+    <circle cx="88" cy="301" r="18" fill="#F3B64C" fill-opacity=".68" filter="url(#blur)"/>
+    <circle cx="88" cy="301" r="6" fill="#FFE6A0"/>
+  </g>
+
+  <ellipse cx="435" cy="635" rx="360" ry="52" fill="#000" fill-opacity=".72" filter="url(#shadow)"/>
+  <ellipse cx="338" cy="634" rx="265" ry="21" fill="#E8AE35" fill-opacity=".12" filter="url(#blur)"/>
+
+  <g>
+    <path fill="url(#carPaint)" stroke="#666E73" stroke-width="3" d="m120 458 34-86c18-43 56-70 104-76l220-22c42-4 78 12 105 43l81 94 62 38c22 14 37 37 38 63l3 63c1 19-10 36-28 43-48 20-105 30-173 32l-385 9c-44 1-84-11-112-37-20-18-32-42-34-70l-4-45c-2-21 5-39 23-51l66-42Z"/>
+    <path fill="url(#glass)" stroke="#7B858A" stroke-width="3" d="m191 375 13-31c13-28 37-45 69-49l190-20c30-3 54 7 73 30l51 62-396 8Z"/>
+    <path stroke="#899196" stroke-opacity=".58" stroke-width="3" d="m405 295-9 80M540 307l33 69"/>
+    <path fill="#080B0F" d="m152 456 75-21 4 113-99-4 1-53c1-17 7-28 19-35ZM604 438l82 32c13 9 19 20 20 36l2 33-99 4-5-105Z"/>
+    <path fill="#111820" stroke="#768087" stroke-width="2" d="m234 438 365-10 4 119-360 5-9-114Z"/>
+    <path stroke="#626B71" stroke-width="3" d="m410 434 4 111M591 429l5 109"/>
+    <path fill="#FFD400" d="m286 449 66-2 2 6-66 2zM466 443l64-2 2 6-66 2z"/>
+    <path fill="#FFD400" fill-opacity=".9" d="m111 481 61-19c7-2 13 3 13 10v25l-73 8-8-12c-3-5 1-10 7-12ZM632 466l67 26c7 3 12 8 13 15l2 12-80 2-2-55Z"/>
+    <path fill="#161A1E" d="m108 544 622-9 1 28c-2 20-15 33-37 42-52 19-116 28-190 31l-344 7c-49 1-87-11-109-36-13-14-18-34-16-55l73-8Z"/>
+    <path stroke="#FFD400" stroke-opacity=".72" stroke-width="5" d="m113 561 93 5M623 558l103-5"/>
+    <path fill="#0A0D11" stroke="#697178" stroke-width="5" d="M181 562a61 61 0 1 0 122 0 61 61 0 0 0-122 0ZM551 556a61 61 0 1 0 122 0 61 61 0 0 0-122 0Z"/>
+    <circle cx="242" cy="562" r="32" fill="#4F555A"/>
+    <circle cx="612" cy="556" r="32" fill="#4F555A"/>
+    <circle cx="242" cy="562" r="15" fill="#171B20"/>
+    <circle cx="612" cy="556" r="15" fill="#171B20"/>
+    <path fill="#FFD400" d="m229 605 23-1 7 6-38 2 8-7ZM598 599l24-1 8 6-39 2 7-7Z"/>
+    <path fill="#A8B1B4" d="m235 409 31-2v8l-32 2zM573 400l29 7 2 8-30-7z"/>
+
+    <image href="/icons/kkary-target.svg" x="354" y="464" width="57" height="57"/>
+    <image href="/icons/kkary-target.svg" x="490" y="463" width="43" height="43"/>
+    <text x="429" y="489" fill="#FFD400" font-family="Arial,sans-serif" font-size="16" font-weight="700" letter-spacing="1.3">KKARY</text>
+    <text x="429" y="509" fill="#fff" font-family="Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="2">RIDER</text>
+    <path fill="#FFD400" d="M166 502c10-5 25-9 38-10v30c-18 1-31 0-44-2l6-18Z"/>
+  </g>
+
+  <g>
+    <path fill="#11151A" d="M792 316c-8 66-12 141-13 231l-32 112 31 8 62-105 19-142 11 132 44 119 31-10-28-143-6-202H792Z"/>
+    <path fill="#151A1F" d="M777 604c-13 18-24 42-31 67l35 9 38-60-42-16ZM876 610c10 18 26 42 40 59l31-11-29-69-42 21Z"/>
+    <path fill="url(#skin)" d="M805 230c1-35 20-59 48-60 27-1 45 22 43 56-2 34-19 62-46 63-29 1-47-25-45-59Z"/>
+    <path fill="#090C10" d="M798 234c-5-50 15-83 54-85 37-2 56 26 50 73-8-12-21-23-37-29-19 16-41 25-67 28Z"/>
+    <path fill="#05070A" d="M792 222c25-5 52-14 73-31 18 8 32 20 42 37l4-23c-6-42-28-63-64-62-39 1-61 31-55 79Z"/>
+    <path fill="#FFD400" d="M810 160h83c-3 9-10 15-20 16h-44c-9-1-16-7-19-16Z"/>
+    <path fill="#11151A" d="m771 312 37-21 39 19 39-18 43 25c19 15 32 38 37 68l17 130-55 24-21-88-1 168H773l-5-168-24 88-54-23 28-139c7-32 24-53 53-65Z"/>
+    <path fill="#FFD400" d="m812 298 36 31 37-31-11 84h-51l-11-84Z"/>
+    <path fill="#0A0E13" d="m805 305 41 37 42-37 9 15-51 47-51-47 10-15Z"/>
+    <path fill="#A9B4BA" d="M790 402h102v4H790z"/>
+    <image href="/icons/kkary-target.svg" x="823" y="369" width="29" height="29"/>
+    <text x="801" y="424" fill="#FFD400" font-family="Arial,sans-serif" font-size="10" font-weight="700" letter-spacing=".7">KKARY RIDER</text>
+    <path fill="#532F24" d="M825 247c7 7 17 10 27 10 10-1 18-4 25-12-5 17-17 27-31 27-13 0-23-9-21-25Z" opacity=".55"/>
+  </g>
+
+  <path fill="#FFD400" fill-opacity=".08" d="M0 700h1000v60H0z"/>
+</svg>

@@ -16,7 +16,17 @@ const markerIcon = (color: string) =>
 
 const pickupIcon = markerIcon("#16866d");
 const destinationIcon = markerIcon("#f4b942");
-const driverIcon = markerIcon("#2769c9");
+const vehicleEmoji: Record<"bike" | "car" | "tricycle", string> = {
+  bike: "🏍️",
+  car: "🚗",
+  tricycle: "🛺",
+};
+const vehicleMarkerIcon = (type: "bike" | "car" | "tricycle") => L.divIcon({
+  className: "",
+  html: `<span style="display:flex;width:34px;height:34px;align-items:center;justify-content:center;border:2px solid white;border-radius:50%;background:#2769c9;box-shadow:0 2px 8px #102a2c88;font-size:18px">${vehicleEmoji[type]}</span>`,
+  iconSize: [34, 34],
+  iconAnchor: [17, 17],
+});
 const userLocationIcon = L.divIcon({
   className: "",
   html: '<span style="display:block;width:24px;height:24px;border:3px solid white;border-radius:50%;background:#2878e0;box-shadow:0 0 0 7px #2878e044,0 2px 8px #102a2c88"></span>',
@@ -29,19 +39,16 @@ function MapInteraction({
   onSelect,
   focus,
   fit,
-  initialBounds,
   userLocation,
 }: {
   target: "pickup" | "destination" | null;
   onSelect?: (target: "pickup" | "destination", point: Coordinate) => void;
   focus: Coordinate;
   fit: Coordinate[];
-  initialBounds?: [Coordinate, Coordinate];
   userLocation?: Coordinate | null;
 }) {
   const map = useMap();
   const fitKey = fit.map(point => `${point.lat},${point.lng}`).join(";");
-  const boundsKey = initialBounds?.map(point => `${point.lat},${point.lng}`).join(";");
   useMapEvents({
     click(event) {
       if (target && onSelect) {
@@ -53,15 +60,13 @@ function MapInteraction({
     if (fit.length > 1) {
       map.fitBounds(fit.map(point => [point.lat, point.lng]), { padding: [32, 32], maxZoom: 15 });
     } else if (fit.length === 1) {
-      map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 13), { duration: 0.5 });
-    } else if (initialBounds) {
-      map.fitBounds(initialBounds.map(point => [point.lat, point.lng]), { padding: [24, 24], maxZoom: 10 });
+      map.flyTo([focus.lat, focus.lng], 16, { duration: 0.5 });
     } else if (userLocation) {
-      map.flyTo([userLocation.lat, userLocation.lng], 14, { duration: 0.8 });
+      map.flyTo([userLocation.lat, userLocation.lng], 16, { duration: 0.8 });
     } else {
       map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 13), { duration: 0.5 });
     }
-  }, [boundsKey, fitKey, focus.lat, focus.lng, initialBounds, map, userLocation?.lat, userLocation?.lng]);
+  }, [fitKey, focus.lat, focus.lng, map, userLocation?.lat, userLocation?.lng]);
   useEffect(() => {
     const timer = window.setTimeout(() => map.invalidateSize(), 100);
     return () => window.clearTimeout(timer);
@@ -74,9 +79,9 @@ export function RideMap({
   destination,
   driver,
   userLocation,
+  nearbyVehicles,
   route,
   center,
-  initialBounds,
   initialZoom = 13,
   selectionTarget = null,
   onSelectLocation,
@@ -84,11 +89,11 @@ export function RideMap({
 }: {
   pickup?: Place | null;
   destination?: Place | null;
-  driver?: (Coordinate & { name?: string | null }) | null;
+  driver?: (Coordinate & { name?: string | null; vehicleType?: "bike" | "car" | "tricycle" }) | null;
   userLocation?: Coordinate | null;
+  nearbyVehicles?: Array<Coordinate & { vehicleType: "bike" | "car" | "tricycle" }>;
   route?: Coordinate[];
   center: Coordinate;
-  initialBounds?: [Coordinate, Coordinate];
   initialZoom?: number;
   selectionTarget?: "pickup" | "destination" | null;
   onSelectLocation?: (target: "pickup" | "destination", point: Coordinate) => void;
@@ -99,7 +104,8 @@ export function RideMap({
     ...(route?.length ? route : []),
     ...(pickup ? [pickup] : []),
     ...(destination ? [destination] : []),
-  ], [route, pickup?.lat, pickup?.lng, destination?.lat, destination?.lng]);
+    ...(driver ? [{ lat: Number(driver.lat.toFixed(2)), lng: Number(driver.lng.toFixed(2)) }] : []),
+  ], [route, pickup?.lat, pickup?.lng, destination?.lat, destination?.lng, driver?.lat.toFixed(2), driver?.lng.toFixed(2)]);
   const focus = pickup ?? center;
   const routePositions = route?.map(point => [point.lat, point.lng] as [number, number]) ?? [];
 
@@ -117,7 +123,6 @@ export function RideMap({
             onSelect={onSelectLocation}
             focus={focus}
             fit={fitPoints}
-            initialBounds={initialBounds}
             userLocation={userLocation}
           />
           {routePositions.length > 1 && (
@@ -134,10 +139,19 @@ export function RideMap({
             </Marker>
           )}
           {driver && (
-            <Marker position={[driver.lat, driver.lng]} icon={driverIcon}>
-              <Popup>{driver.name || "Your driver"}</Popup>
+            <Marker position={[driver.lat, driver.lng]} icon={vehicleMarkerIcon(driver.vehicleType ?? "car")}>
+              <Popup>{driver.name || "Your driver"} · {driver.vehicleType === "bike" ? "Motorcycle" : driver.vehicleType === "tricycle" ? "Tricycle" : "Car"}</Popup>
             </Marker>
           )}
+          {nearbyVehicles?.map((vehicle, index) => (
+            <Marker
+              key={`${vehicle.vehicleType}-${vehicle.lat}-${vehicle.lng}-${index}`}
+              position={[vehicle.lat, vehicle.lng]}
+              icon={vehicleMarkerIcon(vehicle.vehicleType)}
+            >
+              <Popup>Online {vehicle.vehicleType === "bike" ? "motorcycle" : vehicle.vehicleType}</Popup>
+            </Marker>
+          ))}
           {userLocation && (
             <Marker position={[userLocation.lat, userLocation.lng]} icon={userLocationIcon} zIndexOffset={1000}>
               <Popup>You are here</Popup>

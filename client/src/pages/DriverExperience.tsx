@@ -25,8 +25,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { normalizeE164PhoneNumber } from "@/lib/phoneAuth";
+import { getNigerianLgas, nigeriaStates } from "@shared/nigeriaLocations";
 import { supabase } from "@/lib/supabase";
 import { AppUpdateCard } from "@/components/AppUpdateCard";
+import { BrandLogo } from "@/components/BrandLogo";
 import { DriverDispatch } from "@/components/ride/DriverDispatch";
 import DriverLandingPage from "@/pages/DriverLandingPage";
 
@@ -79,7 +81,7 @@ export function DriverExperience() {
   const [currentTab, setCurrentTab] = useState<ActivityTab>("home");
   const [unreadMailCount, setUnreadMailCount] = useState(0);
 
-  const [signupForm, setSignupForm] = useState({ name: "", email: "", phone: "", password: "", confirmPassword: "" });
+  const [signupForm, setSignupForm] = useState({ name: "", email: "", phone: "", state: "", lga: "", password: "", confirmPassword: "" });
   const [signinForm, setSigninForm] = useState({ emailOrPhone: "", password: "" });
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
@@ -146,6 +148,8 @@ export function DriverExperience() {
     if (
       !signupForm.name.trim() ||
       !signupForm.email.trim() ||
+      !signupForm.state ||
+      !signupForm.lga ||
       signupForm.password.length < 10 ||
       signupForm.password !== signupForm.confirmPassword
     ) {
@@ -164,6 +168,8 @@ export function DriverExperience() {
                 full_name: signupForm.name.trim(),
                 email: signupForm.email.trim(),
                 phone,
+                state: signupForm.state,
+                lga: signupForm.lga,
                 user_type: "driver",
               },
             },
@@ -176,6 +182,8 @@ export function DriverExperience() {
                 name: signupForm.name.trim(),
                 full_name: signupForm.name.trim(),
                 phone: null,
+                state: signupForm.state,
+                lga: signupForm.lga,
                 user_type: "driver",
               },
             },
@@ -219,6 +227,8 @@ export function DriverExperience() {
           name: signupForm.name.trim(),
           full_name: signupForm.name.trim(),
           phone,
+          state: signupForm.state,
+          lga: signupForm.lga,
           user_type: "driver",
         },
       });
@@ -382,7 +392,7 @@ export function DriverExperience() {
                       if (!phone) throw new Error("Enter a valid phone number in international format.");
                       const { error } = await supabase.auth.updateUser({
                         email: signupForm.email.trim(),
-                        data: { name: signupForm.name.trim(), full_name: signupForm.name.trim(), phone, user_type: "driver" },
+                        data: { name: signupForm.name.trim(), full_name: signupForm.name.trim(), phone, state: signupForm.state, lga: signupForm.lga, user_type: "driver" },
                       });
                       if (error) throw error;
                       setSignupCompleted(true);
@@ -433,6 +443,27 @@ export function DriverExperience() {
                     }}
                     className="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-700 focus:border-blue-500 outline-none"
                   />
+                  <div className="grid grid-cols-2 gap-3">
+                    <select
+                      required
+                      value={signupForm.state}
+                      onChange={event => setSignupForm({ ...signupForm, state: event.target.value, lga: "" })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-3 text-white"
+                    >
+                      <option value="">Select state</option>
+                      {nigeriaStates.map(state => <option key={state} value={state}>{state}</option>)}
+                    </select>
+                    <select
+                      required
+                      value={signupForm.lga}
+                      disabled={!signupForm.state}
+                      onChange={event => setSignupForm({ ...signupForm, lga: event.target.value })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-3 text-white disabled:opacity-50"
+                    >
+                      <option value="">Select L.G.A.</option>
+                      {getNigerianLgas(signupForm.state).map(lga => <option key={lga} value={lga}>{lga}</option>)}
+                    </select>
+                  </div>
                   <input
                     type="password"
                     placeholder="Password (min 10 chars)"
@@ -535,7 +566,10 @@ export function DriverExperience() {
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white">
       <header className="bg-black px-4 py-3 flex items-center justify-between sticky top-0 z-50">
-        <h1 className="text-xl font-bold text-blue-500">Kkary Driver</h1>
+        <div className="flex items-center gap-2">
+          <BrandLogo driver className="h-9 w-9 rounded-xl" />
+          <h1 className="text-xl font-bold text-blue-500">Kkary Driver</h1>
+        </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setShowMailModal(true)} className="relative">
             <Mail className="w-6 h-6" />

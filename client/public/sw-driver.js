@@ -1,13 +1,13 @@
 /* Service Worker for Kkary Driver PWA */
 
-const CACHE_NAME = "kkary-driver-v1";
+const CACHE_NAME = "kkary-driver-v3";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
   "/manifest-driver.json",
+  "/icons/kkary-target-driver.svg",
   "/icons/driver-192.png",
   "/icons/driver-512.png",
-  "/icons/kkary-target.svg",
   "/images/driver-landing.png",
 ];
 

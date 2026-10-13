@@ -14,8 +14,10 @@
     
     <!-- PWA Manifest -->
     <script>
-      const isDriverApp = window.location.hostname === "kkarydriver.aevonindustries.site";
-      document.write(`<link id="kkary-manifest" rel="manifest" href="${isDriverApp ? "/manifest-driver.json" : "/manifest.json"}">`);
+      (() => {
+        const isDriverApp = window.location.hostname === "kkarydriver.aevonindustries.site";
+        document.write(`<link id="kkary-manifest" rel="manifest" href="${isDriverApp ? "/manifest-driver.json" : "/manifest.json"}">`);
+      })();
     </script>
     <!-- PWA Metadata -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -25,9 +27,9 @@
     <meta name="msapplication-config" content="/browserconfig.xml" />
     <meta name="msapplication-TileColor" content="#113a3b" />
     <script>
-      if (isDriverApp) {
+      if (window.location.hostname === "kkarydriver.aevonindustries.site") {
         document.title = "Kkary Driver — local mobility";
-        document.querySelector('meta[name="theme-color"]').content = "#030A13";
+        document.querySelector('meta[name="theme-color"]').content = "#1769E0";
         document.querySelector('meta[name="application-name"]').content = "Kkary Driver";
         document.querySelector('meta[name="apple-mobile-web-app-title"]').content = "Kkary Driver";
         document.getElementById("kkary-apple-icon").href = "/icons/driver-192.png";

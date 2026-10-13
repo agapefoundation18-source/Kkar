@@ -28,8 +28,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
+import { BrandLogo } from "@/components/BrandLogo";
 import RiderLandingPage from "@/pages/RiderLandingPage";
 import { normalizeE164PhoneNumber } from "@/lib/phoneAuth";
+import { getNigerianLgas, nigeriaStates } from "@shared/nigeriaLocations";
 import { hasSupabaseConfig, supabase } from "@/lib/supabase";
 import RiderAccount from "@/pages/RiderAccount";
 import { RiderActivity, type RideHistoryItem } from "@/components/ride/RiderActivity";
@@ -84,9 +86,7 @@ const BOTPRESS_CONFIG_URL = "https://files.bpcontent.cloud/2026/10/06/23/2026100
 function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#f4b942] text-[#102a2c] shadow-[0_8px_24px_rgba(244,185,66,0.28)]">
-        <Navigation className="h-5 w-5 fill-current" strokeWidth={2.5} />
-      </div>
+      <BrandLogo className="h-10 w-10 rounded-2xl shadow-[0_8px_24px_rgba(244,185,66,0.28)]" />
       <div>
         <div className="text-[18px] font-black tracking-[-0.07em] text-white">Kkary</div>
         <div className="-mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#9fcfc2]">Move local</div>
@@ -215,6 +215,8 @@ function AuthExperience({
     name: "",
     email: "",
     phone: "",
+    state: "",
+    lga: "",
     password: "",
     confirmPassword: "",
   });
@@ -296,7 +298,7 @@ function AuthExperience({
       setIsPhoneVerified(true);
       const { error: profileError } = await supabase.auth.updateUser({
         email: form.email.trim(),
-        data: { full_name: form.name.trim(), phone, user_type: "rider" },
+        data: { full_name: form.name.trim(), phone, state: form.state, lga: form.lga, user_type: "rider" },
       });
       if (profileError) throw profileError;
       onAuthenticated();
@@ -316,8 +318,8 @@ function AuthExperience({
       setError("Enter a valid phone number in international format, such as +2348000000000.");
       return;
     }
-    if (authMode === "signup" && (!form.name.trim() || !form.email.trim() || !form.password || !form.confirmPassword)) {
-      setError("Complete all sign-up fields before creating your account.");
+    if (authMode === "signup" && (!form.name.trim() || !form.email.trim() || !form.password || !form.confirmPassword || !form.state || !form.lga)) {
+      setError("Complete all sign-up fields, including your state and L.G.A., before creating your account.");
       return;
     }
     if (authMode === "signup" && (form.password.length < 8 || form.password !== form.confirmPassword)) {
@@ -343,6 +345,8 @@ function AuthExperience({
               full_name: form.name.trim(),
               email: form.email.trim(),
               phone,
+              state: form.state,
+              lga: form.lga,
               user_type: "rider",
             },
           },
@@ -358,7 +362,7 @@ function AuthExperience({
           email: form.email.trim(),
           password: form.password,
           options: {
-            data: { full_name: form.name.trim(), phone: null, user_type: "rider" },
+            data: { full_name: form.name.trim(), phone: null, state: form.state, lga: form.lga, user_type: "rider" },
           },
         });
         if (signUpError) throw signUpError;
@@ -376,7 +380,7 @@ function AuthExperience({
         }
         const { error: updateError } = await supabase.auth.updateUser({
           email: form.email.trim(),
-          data: { full_name: form.name.trim(), phone, user_type: "rider" },
+          data: { full_name: form.name.trim(), phone, state: form.state, lga: form.lga, user_type: "rider" },
         });
         if (updateError) throw updateError;
         onAuthenticated();
@@ -541,6 +545,34 @@ function AuthExperience({
                 </div>
                 {isPhoneVerified && <div className="mt-2 text-xs font-medium text-[#a9f0d5]">Verified</div>}
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs font-bold uppercase tracking-[0.14em] text-[#b8d6cf]">
+                  State
+                  <select
+                    required
+                    value={form.state}
+                    disabled={phoneOtpSent}
+                    onChange={event => setForm(current => ({ ...current, state: event.target.value, lga: "" }))}
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#13393c] px-3 py-3 text-sm font-normal text-white"
+                  >
+                    <option value="">Select state</option>
+                    {nigeriaStates.map(state => <option key={state} value={state}>{state}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-bold uppercase tracking-[0.14em] text-[#b8d6cf]">
+                  L.G.A.
+                  <select
+                    required
+                    value={form.lga}
+                    disabled={!form.state || phoneOtpSent}
+                    onChange={event => updateForm("lga", event.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-[#13393c] px-3 py-3 text-sm font-normal text-white disabled:opacity-50"
+                  >
+                    <option value="">Select L.G.A.</option>
+                    {getNigerianLgas(form.state).map(lga => <option key={lga} value={lga}>{lga}</option>)}
+                  </select>
+                </label>
+              </div>
             </div>
           )}
 
@@ -658,9 +690,7 @@ function RiderDashboard({ user, onSignedOut }: { user: SupabaseUser; onSignedOut
         <header className="px-4 pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f4b942] text-[#10353a] shadow-[0_14px_30px_rgba(244,185,66,0.22)]">
-                <Navigation className="h-5 w-5 fill-current" strokeWidth={2.5} />
-              </div>
+              <BrandLogo className="h-12 w-12 rounded-2xl shadow-[0_14px_30px_rgba(244,185,66,0.22)]" />
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#6d9c93]">Good evening</div>
                 <div className="text-xl font-black tracking-[-0.05em]">Kkary</div>
@@ -674,7 +704,10 @@ function RiderDashboard({ user, onSignedOut }: { user: SupabaseUser; onSignedOut
         </header>
 
         {activeTab === "home" && (
-          <RiderBooking />
+          <RiderBooking
+            defaultState={typeof user.user_metadata.state === "string" ? user.user_metadata.state : undefined}
+            defaultLga={typeof user.user_metadata.lga === "string" ? user.user_metadata.lga : undefined}
+          />
         )}
 
         {activeTab === "activity" && (
@@ -892,7 +925,7 @@ export default function RiderExperience() {
             <a href="#how-it-works" className="transition-colors hover:text-white">How it works</a>
             <a href="#apps" className="transition-colors hover:text-white">Apps</a>
             <a href="#safety" className="transition-colors hover:text-white">Safety</a>
-            <a href="https://kkarydriver.aevonindustries.site/" className="transition-colors hover:text-white">Become a Kkary Driver</a>
+            <a href="https://kkarydriver.aevonindustries.site/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-white">Become a Kkary Driver</a>
           </nav>
           <div className="hidden items-center gap-3 md:flex">
             {canInstall && !isInstalled && (
@@ -912,7 +945,7 @@ export default function RiderExperience() {
               <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
               <a href="#apps" onClick={() => setMenuOpen(false)}>Apps</a>
               <a href="#safety" onClick={() => setMenuOpen(false)}>Safety</a>
-              <a href="https://kkarydriver.aevonindustries.site/" onClick={() => setMenuOpen(false)}>Become a Kkary Driver</a>
+              <a href="https://kkarydriver.aevonindustries.site/" target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)}>Become a Kkary Driver</a>
             </div>
           </div>
         )}
@@ -927,7 +960,7 @@ export default function RiderExperience() {
               <span className="text-[#f4c24d]">Move together.</span>
             </h1>
             <p className="mt-7 max-w-[520px] text-base leading-relaxed text-[#bad5d1] sm:text-lg">
-              Kkary connects riders and trusted drivers across Akwa Ibom with clear fares, safer trips, and technology made for everyday movement.
+              Kkary connects riders and trusted drivers across Nigeria with clear fares, safer trips, and technology made for everyday movement.
             </p>
             <div className="mt-7 flex items-center gap-3 text-[11px] font-semibold text-[#9fc9c0]">
               <ShieldCheck className="h-4 w-4 text-[#62b193]" /> Secure payments · Verified drivers · Built for local routes

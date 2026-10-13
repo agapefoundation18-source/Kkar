@@ -46,7 +46,7 @@
   4. Adjust pricing in "Pricing & share" section
   5. Read/respond to messages in "Messages" section
 
-Kkary app drivers must submit a driver licence and NIN, plus registration and insurance for their selected Motorcycle or Car. Document approval alone does not approve the driver profile: approve the driver application only after the full checklist is approved. A rejected file can be replaced and returns to pending review. Review links expire after five minutes; document objects remain in the private `driver-documents` bucket.
+Kkary app drivers must submit a driver licence and NIN, plus registration and insurance for their selected Motorcycle, Car, or Tricycle. Document approval alone does not approve the driver profile: approve the driver application only after the full checklist is approved. A rejected file can be replaced and returns to pending review. Review links expire after five minutes; document objects remain in the private `driver-documents` bucket.
 
 Before enabling this workflow, apply `supabase/migrations/20261012_driver_identity_and_vehicle_documents.sql` after the existing Supabase live-dispatch migrations. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` only on the server; the admin console uses these to query metadata and mint short-lived signed links. Do not make the document bucket public.
 
@@ -111,13 +111,14 @@ Before enabling this workflow, apply `supabase/migrations/20261012_driver_identi
 
 ### Approving Kkar PWA Drivers
 The Rider and Driver PWAs use Supabase profiles, separate from the legacy driver/document records above.
-1. Apply `supabase/migrations/20261008_live_ride_dispatch.sql` and then `supabase/migrations/20261010_live_dispatch_offers_and_vehicle_availability.sql` to the Kkar Supabase project. The second migration also installs the Auth-user profile trigger required for new Rider and Driver accounts.
+1. Apply the Supabase migrations in order: `20261008_live_ride_dispatch.sql`, `20261010_live_dispatch_offers_and_vehicle_availability.sql`, `20261012_driver_identity_and_vehicle_documents.sql`, and `20261013_nigeria_service_areas_and_vehicle_types.sql`. The final migration adds state/L.G.A. registration, enabled vehicle types, tricycle document support, Nigeria-wide ride RPCs, and the Supabase-backed Admin overview.
 2. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` as server-only deployment variables; never expose the service-role key to browser code.
-3. Go to **Driver review** and review the **Kkar app driver applications** queue.
-4. Independently complete the required identity, licence, vehicle-registration, and insurance checks before approving an applicant. The PWA application form only collects vehicle details; it does not collect verification documents.
-5. Use **Approve** only after those checks. Approved drivers can then go online in the Driver PWA; unapproved drivers cannot accept rides.
+3. In **Vehicles operating by L.G.A.**, enable each vehicle type that should operate in each state and L.G.A. All types are disabled until an administrator enables them.
+4. Go to **Driver review** and review the **Kkary app driver applications** queue.
+5. Independently complete the required identity, licence, vehicle-registration, and insurance checks before approving an applicant. The PWA application form only collects vehicle details; it does not collect verification documents.
+6. Use **Approve** only after those checks. Approved drivers can then go online in the Driver PWA; unapproved drivers cannot accept rides.
 
-Ride options show the server-calculated fare and count of approved, online drivers within 30 km of pickup whose location was refreshed in the last two minutes. Drivers see matching offers with the rider's name, private profile picture when available, and pickup/drop-off pins; they can accept or permanently decline an individual offer. Rider and driver profile pictures are shared only with the other party during an eligible pickup or active ride. The offer list refreshes while the Driver app is open.
+Ride options only include vehicle types enabled in the pickup L.G.A. and count approved, online drivers within 30 km whose location was refreshed in the last two minutes. Drivers see matching offers only when the pickup L.G.A. and their registered service area both allow that vehicle type. Rider and driver profile pictures are shared only with the other party during an eligible pickup or active ride. The offer list refreshes while the Driver app is open.
 
 ### Rider and Driver Sessions
 Both PWAs persist Supabase sessions and restore a valid session directly to the dashboard. Location access is checked during new account creation only; sign-in does not require another location prompt. The operating system may still require the user to re-enable location from device settings after revoking the permission.
@@ -140,7 +141,7 @@ To expire sessions after about two months of inactivity, set the Supabase projec
 2. Choose **Publish new version** to publish a semantic version and optional release notes. Riders and drivers who have not acknowledged that update see an Update button in their account.
 3. Choose **Publish update** for a routine deployment without changing the app version. This requests a Vercel deployment and publishes the same account update notice. It requires `VERCEL_DEPLOY_HOOK_URL` as a server-side Vercel environment variable.
 4. The update button appears in the Rider account just below **Earn with Kkary**, and in the Driver account just above **Log out**. It stays hidden unless an update has been published and disappears for each user after they install it.
-5. The rider PWA is installed from `/`; the driver PWA is installed from the Driver hostname. They use separate manifests and start screens.
+5. Install the Rider PWA from `kkary.aevonindustries.site` and the Driver PWA from `kkarydriver.aevonindustries.site`. Each hostname has its own manifest, service worker, and start screen.
 6. Existing installs should be removed and reinstalled from the correct page after the new icons/manifests deploy, especially if the previous shortcut showed browser branding or opened in a browser tab.
 
 The admin actions publish release metadata or request a Vercel deployment. New code still has to be deployed before users can receive it. Automatic deployment on every code edit requires connecting the Vercel project to the Git repository and enabling production deployments from the desired branch. Direct local edits are not deployed automatically.
@@ -149,7 +150,7 @@ The admin actions publish release metadata or request a Vercel deployment. New c
 1. Sign in at `/admin`. The first-time administrator setup requires a new username and password; after saving, you are signed out and must sign in again with the new credentials.
 2. Open **Launch page**.
 3. Set the planned launch date and time using your local timezone.
-4. Turn on **Enable coming soon** and save. Visitors to the Rider (`/`) and Driver (`/drivers`) URLs see the launch countdown and waitlist instead of the apps. The admin console remains available.
+4. Turn on **Enable coming soon** and save. Visitors to the public Rider and Driver hostnames see the launch countdown and waitlist instead of the apps. The admin console remains available.
 5. Turn the setting off and save when the apps are ready for public access.
 6. Open **Mailbox → Waitlist** to review submitted email addresses and join times or export them as CSV. Waitlist entries and personalized drafts are stored in the existing platform settings table; only administrator accounts can list, draft, or export them.
 

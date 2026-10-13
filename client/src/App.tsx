@@ -20,7 +20,8 @@ function Router() {
     refetchOnWindowFocus: true,
   });
   const isLegacyDriverPath = !isDriverHost && window.location.pathname === "/drivers";
-  const isPublicAppPath = !isDriverHost && window.location.pathname === "/";
+  const isPublicAppPath = window.location.pathname === "/" &&
+    new URLSearchParams(window.location.search).get("mode") !== "app";
   useEffect(() => {
     if (isLegacyDriverPath) {
       window.location.replace("https://kkarydriver.aevonindustries.site/");

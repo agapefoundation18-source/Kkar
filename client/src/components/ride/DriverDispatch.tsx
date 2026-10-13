@@ -3,11 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatNaira } from "@shared/rideMath";
 import { DRIVER_DOCUMENT_LABELS, hasVerifiedDriverDocuments, requiredDriverDocuments, type DriverDocumentType } from "@shared/driverDocuments";
 import { supabase } from "@/lib/supabase";
+import { trpc } from "@/lib/trpc";
 import { RideMap } from "./RideMap";
 import { RouteDirections } from "./RouteDirections";
 import { defaultMapCenter, getRouteEstimate, type Place, type RouteEstimate } from "./rideLocations";
 
-type VehicleType = "bike" | "car";
+type VehicleType = "bike" | "car" | "tricycle";
 type RideStatus = "matching" | "driver_assigned" | "driver_en_route" | "driver_arrived" | "trip_started" | "trip_completed" | "cancelled_by_rider" | "cancelled_by_driver" | "cancelled_no_driver";
 type DriverProfile = {
   id: string;
@@ -18,6 +19,8 @@ type DriverProfile = {
   vehicle_model: string;
   vehicle_color: string;
   plate_number: string;
+  state: string | null;
+  lga: string | null;
   current_lat: number | null;
   current_lng: number | null;
 };
@@ -100,8 +103,15 @@ function pointPlace(lat: number, lng: number, label: string): Place {
 }
 
 export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }) {
-  const defaultCenter = useMemo(defaultMapCenter, []);
   const [profile, setProfile] = useState<DriverProfile | null>(null);
+  const [signupArea, setSignupArea] = useState<{ state: string; lga: string } | null>(null);
+  const profileArea = profile?.state && profile.lga ? { state: profile.state, lga: profile.lga } : null;
+  const serviceArea = useMemo(() => profileArea ?? signupArea, [profileArea, signupArea]);
+  const configuredVehicles = trpc.shared.serviceVehicles.useQuery(
+    serviceArea ?? { state: "", lga: "" },
+    { enabled: Boolean(serviceArea?.state && serviceArea?.lga) },
+  );
+  const defaultCenter = useMemo(defaultMapCenter, []);
   const [documents, setDocuments] = useState<DriverDocument[]>([]);
   const [application, setApplication] = useState(initialApplication);
   const [availableRides, setAvailableRides] = useState<RideRecord[]>([]);
@@ -119,6 +129,26 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
   const dismissedRideId = useRef<string | null>(null);
   const signedAvatarPaths = useRef<Record<string, string>>({});
   const notifiedRideIds = useRef(new Set<string>());
+  useEffect(() => {
+    let current = true;
+    void supabase.auth.getUser().then(({ data, error: userError }) => {
+      if (userError) throw userError;
+      if (!current) return;
+      const state = data.user?.user_metadata?.state;
+      const lga = data.user?.user_metadata?.lga;
+      if (typeof state === "string" && typeof lga === "string") setSignupArea({ state, lga });
+    }).catch(cause => {
+      if (current) setError(cause instanceof Error ? cause.message : "Could not load your service area.");
+    });
+    return () => { current = false; };
+  }, []);
+
+  useEffect(() => {
+    const firstConfigured = configuredVehicles.data?.[0];
+    if (firstConfigured && !configuredVehicles.data?.includes(application.vehicle_type)) {
+      setApplication(current => ({ ...current, vehicle_type: firstConfigured }));
+    }
+  }, [application.vehicle_type, configuredVehicles.data]);
 
   const loadState = useCallback(async () => {
     const [profileResult, activeResult, historyResult] = await Promise.all([
@@ -496,11 +526,18 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
           <select
             value={application.vehicle_type}
             onChange={event => setApplication({ ...application, vehicle_type: event.target.value as VehicleType })}
+            disabled={configuredVehicles.isLoading || !configuredVehicles.data?.length}
             className="w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white"
           >
-            <option value="bike">Motorcycle</option>
-            <option value="car">Car</option>
+            {(configuredVehicles.data ?? []).map(vehicle => (
+              <option key={vehicle} value={vehicle}>{vehicle === "bike" ? "Motorcycle" : vehicle === "car" ? "Car" : "Tricycle"}</option>
+            ))}
           </select>
+          {configuredVehicles.isLoading && <p className="text-xs text-gray-400">Loading vehicle types available in your L.G.A.…</p>}
+          {configuredVehicles.error && <p role="alert" className="text-xs text-red-300">Could not load L.G.A. vehicle types: {configuredVehicles.error.message}</p>}
+          {!configuredVehicles.isLoading && !configuredVehicles.error && !configuredVehicles.data?.length && (
+            <p className="text-xs text-amber-200">No vehicle types are enabled for {serviceArea ? `${serviceArea.lga}, ${serviceArea.state}` : "your selected area"}. Contact Kkary support or choose an enabled service area before applying.</p>
+          )}
           {([
             ["vehicle_make", "Vehicle make"],
             ["vehicle_model", "Vehicle model"],
@@ -517,7 +554,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
               className="w-full rounded-lg border border-gray-700 bg-gray-900 p-3 text-white placeholder:text-gray-500"
             />
           ))}
-          <button disabled={saving} className="w-full rounded-lg bg-blue-600 py-3 font-bold disabled:opacity-50">
+          <button disabled={saving || configuredVehicles.isLoading || !configuredVehicles.data?.length} className="w-full rounded-lg bg-blue-600 py-3 font-bold disabled:opacity-50">
             {saving ? "Submitting…" : "Submit for approval"}
           </button>
         </form>

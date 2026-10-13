@@ -1,6 +1,6 @@
 /* Service Worker for Kkary PWA */
 
-const CACHE_NAME = 'kkary-rider-v7';
+const CACHE_NAME = 'kkary-rider-v8';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

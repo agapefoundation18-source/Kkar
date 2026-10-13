@@ -2,7 +2,7 @@ import { BadgeCheck, Bike, Check, ChevronRight, FileCheck2, MapPin, Smartphone }
 import { useState } from "react";
 
 const steps = [
-  { icon: MapPin, label: "Choose your area", title: "Set your default L.G.A.", body: "Tell Kkary where you normally drive. This helps match you with nearby trips while keeping your route choices flexible.", checklist: ["Select your default L.G.A.", "Choose bike or car", "Add vehicle details"] },
+  { icon: MapPin, label: "Choose your area", title: "Set your default L.G.A.", body: "Tell Kkary where you normally drive. This helps match you with nearby trips while keeping your route choices flexible.", checklist: ["Select your state and L.G.A.", "Choose an enabled vehicle type", "Add vehicle details"] },
   { icon: FileCheck2, label: "Upload documents", title: "Send clear documents for review.", body: "Use the Driver app to capture or select each document. Make sure names, numbers, and expiry dates are readable.", checklist: ["Driver’s license", "Vehicle registration", "Insurance document", "Profile photo"] },
   { icon: BadgeCheck, label: "Get verified", title: "Our team reviews your application.", body: "Kkary checks your application and documents before you can go online. You can follow the review status in the app.", checklist: ["Application submitted", "Documents reviewed", "Approval notification"] },
   { icon: Smartphone, label: "Start earning", title: "Go online when you are ready.", body: "Once approved, open Driver mode, choose your availability, accept trips, and see your transparent earnings after each ride.", checklist: ["Install Kkary Driver", "Allow location access", "Set yourself online"] },

@@ -3,16 +3,16 @@
   "name": "Kkary Driver",
   "short_name": "Kkary Driver",
   "description": "Accept trips and manage driver earnings with Kkary Driver",
-  "start_url": "/",
+  "start_url": "/?mode=app",
   "scope": "/",
   "display_override": ["standalone", "minimal-ui"],
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#030A13",
-  "theme_color": "#030A13",
+  "theme_color": "#1769E0",
   "icons": [
     {
-      "src": "/icons/kkary-target.svg",
+      "src": "/icons/kkary-target-driver.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"

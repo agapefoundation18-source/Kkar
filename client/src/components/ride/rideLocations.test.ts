@@ -24,12 +24,12 @@ describe("Geoapify ride locations", () => {
     expect(getGeoapifyApiKey()).toBe("test-key");
   });
 
-  it("uses Geoapify autocomplete and limits results to Akwa Ibom in Nigeria", async () => {
+  it("uses Geoapify autocomplete and limits results to Nigeria", async () => {
     vi.stubEnv("VITE_GEOAPIFY_API_KEY", "test-key");
     mockedFetch.mockResolvedValue(jsonResponse({
       results: [
-        { formatted: "Uyo, Akwa Ibom, Nigeria", lat: 5.03, lon: 7.91, country_code: "ng" },
-        { formatted: "Lagos, Nigeria", lat: 6.45, lon: 3.4, country_code: "ng" },
+        { formatted: "Uyo, Akwa Ibom, Nigeria", lat: 5.03, lon: 7.91, country_code: "ng", state: "Akwa Ibom State", county: "Uyo" },
+        { formatted: "Lagos Island, Lagos, Nigeria", lat: 6.45, lon: 3.4, country_code: "ng", state: "Lagos State", county: "Lagos Island" },
       ],
     }));
     vi.stubGlobal("fetch", mockedFetch);
@@ -37,8 +37,11 @@ describe("Geoapify ride locations", () => {
     const places = await searchPlaces("Uyo");
     const requestUrl = new URL(String(mockedFetch.mock.calls[0][0]));
     expect(requestUrl.pathname).toBe("/v1/geocode/autocomplete");
-    expect(requestUrl.searchParams.get("filter")).toBe("rect:7.25,4.3,8.6,5.7|countrycode:ng");
-    expect(places).toEqual([{ label: "Uyo, Akwa Ibom, Nigeria", lat: 5.03, lng: 7.91 }]);
+    expect(requestUrl.searchParams.get("filter")).toBe("countrycode:ng");
+    expect(places).toEqual([
+      { label: "Uyo, Akwa Ibom, Nigeria", lat: 5.03, lng: 7.91, state: "Akwa Ibom", lga: "Uyo" },
+      { label: "Lagos Island, Lagos, Nigeria", lat: 6.45, lng: 3.4, state: "Lagos", lga: "Lagos Island" },
+    ]);
   });
 
   it("reverse geocodes a map pin through Geoapify", async () => {

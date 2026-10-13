@@ -1,4 +1,4 @@
-import { AlertCircle, Bike, Car, Clock3, RefreshCw, Route } from "lucide-react";
+import { AlertCircle, Bike, Bus, Car, Clock3, RefreshCw, Route } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { formatNaira } from "@shared/rideMath";
 import { supabase } from "@/lib/supabase";
@@ -10,11 +10,11 @@ export type RideHistoryItem = {
   dropoff_address: string;
   created_at: string;
   estimated_fare: number | string;
-  vehicle_type: "bike" | "car";
+  vehicle_type: "bike" | "car" | "tricycle";
   distance_km: number | string | null;
   driver: {
     name: string | null;
-    vehicle_type: "bike" | "car";
+    vehicle_type: "bike" | "car" | "tricycle";
     vehicle_make: string | null;
     vehicle_model: string | null;
     vehicle_color: string | null;
@@ -74,7 +74,7 @@ export function RiderActivity({ onGetHelp }: { onGetHelp: (ride: RideHistoryItem
         const formattedDate = Number.isNaN(date.getTime())
           ? "Date unavailable"
           : new Intl.DateTimeFormat("en-NG", { dateStyle: "medium", timeStyle: "short" }).format(date);
-        const vehicle = ride.vehicle_type === "bike" ? "Bike" : "Car";
+        const vehicle = ride.vehicle_type === "bike" ? "Motorcycle" : ride.vehicle_type === "car" ? "Car" : "Tricycle";
         return (
           <article key={ride.id} className="rounded-[24px] border border-[#e5efed] bg-white p-4 shadow-[0_12px_28px_rgba(16,53,58,0.04)]">
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -91,7 +91,7 @@ export function RiderActivity({ onGetHelp }: { onGetHelp: (ride: RideHistoryItem
             </div>
             <div className="mt-3 flex items-center justify-between border-t border-[#edf3f1] pt-3">
               <span className="inline-flex items-center gap-2 text-xs font-bold text-[#4b706b]">
-                {ride.vehicle_type === "bike" ? <Bike className="h-4 w-4 text-[#c18c1d]" /> : <Car className="h-4 w-4 text-[#c18c1d]" />}
+                {ride.vehicle_type === "bike" ? <Bike className="h-4 w-4 text-[#c18c1d]" /> : ride.vehicle_type === "car" ? <Car className="h-4 w-4 text-[#c18c1d]" /> : <Bus className="h-4 w-4 text-[#c18c1d]" />}
                 {ride.driver?.name || `Kkary ${vehicle}`}
                 {ride.driver?.plate_number ? ` · ${ride.driver.plate_number}` : ""}
               </span>

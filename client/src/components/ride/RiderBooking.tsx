@@ -1,13 +1,14 @@
 import { AlertCircle, Bike, Car, CheckCircle2, Clock3, LocateFixed, MapPin, Navigation, RefreshCw, Search, UserRound, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Coordinate } from "@shared/rideMath";
 import { formatNaira } from "@shared/rideMath";
 import { supabase } from "@/lib/supabase";
 import { RideMap } from "./RideMap";
 import { RouteDirections } from "./RouteDirections";
-import { akwaIbomMapBounds, defaultMapCenter, getRouteEstimate, isInsideServiceArea, reverseGeocode, searchPlaces, type Place, type RouteEstimate } from "./rideLocations";
+import { defaultMapCenter, getRouteEstimate, isInsideServiceArea, reverseGeocodePlace, searchPlaces, type Place, type RouteEstimate } from "./rideLocations";
+import { coordinateFallbackLabel, getCurrentDeviceLocation, LocationAcquisitionError } from "./location";
 
-type VehicleType = "bike" | "car";
+type VehicleType = "bike" | "car" | "tricycle";
 type RideStatus = "matching" | "driver_assigned" | "driver_en_route" | "driver_arrived" | "trip_started" | "trip_completed" | "cancelled_by_rider" | "cancelled_by_driver" | "cancelled_no_driver";
 type DriverSummary = {
   name: string | null;
@@ -21,6 +22,7 @@ type DriverSummary = {
   current_lng: number | null;
   location_updated_at: string | null;
 };
+type NearbyVehicle = Coordinate & { vehicle_type: VehicleType };
 type ActiveRide = {
   id: string;
   pickup_address: string;
@@ -29,6 +31,8 @@ type ActiveRide = {
   pickup_lng: number;
   dropoff_lat: number;
   dropoff_lng: number;
+  pickup_state: string | null;
+  pickup_lga: string | null;
   status: RideStatus;
   vehicle_type: VehicleType;
   estimated_fare: number | string;
@@ -92,7 +96,7 @@ function LocationSearch({
               onSearch();
             }
           }}
-          placeholder={`Search ${label.toLowerCase()} in Akwa Ibom`}
+          placeholder={`Search ${label.toLowerCase()} in Nigeria`}
           aria-label={label}
           className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[#1c3d3d] outline-none placeholder:font-normal placeholder:text-[#8ba29d]"
         />
@@ -125,7 +129,7 @@ function LocationSearch({
   );
 }
 
-export function RiderBooking() {
+export function RiderBooking({ defaultState, defaultLga }: { defaultState?: string; defaultLga?: string }) {
   const defaultCenter = useMemo(defaultMapCenter, []);
   const [pickup, setPickup] = useState<Place | null>(null);
   const [destination, setDestination] = useState<Place | null>(null);
@@ -143,45 +147,69 @@ export function RiderBooking() {
   const [selectionTarget, setSelectionTarget] = useState<"pickup" | "destination">("pickup");
   const [mapCenter, setMapCenter] = useState<Coordinate>(defaultCenter);
   const [userLocation, setUserLocation] = useState<Coordinate | null>(null);
+  const [nearbyVehicles, setNearbyVehicles] = useState<NearbyVehicle[]>([]);
+  const [driverPickupEta, setDriverPickupEta] = useState<number | null>(null);
+  const [driverPickupEtaUnavailable, setDriverPickupEtaUnavailable] = useState(false);
   const [locationNotice, setLocationNotice] = useState("");
   const [activeRide, setActiveRide] = useState<ActiveRide | null>(null);
   const [loadingRide, setLoadingRide] = useState(true);
   const [requesting, setRequesting] = useState(false);
   const [error, setError] = useState("");
   const [locationBusy, setLocationBusy] = useState(false);
+  const manuallySelectedPickup = useRef(false);
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationNotice("Location is unavailable on this device. The map is showing Akwa Ibom.");
-      return;
-    }
-
     let active = true;
-    navigator.geolocation.getCurrentPosition(
-      position => {
+    void getCurrentDeviceLocation({ enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 })
+      .then(async point => {
         if (!active) return;
-        const point = { lat: position.coords.latitude, lng: position.coords.longitude };
-        if (!isInsideServiceArea(point)) {
-          setLocationNotice("Your location is outside the current service area. The map is showing Akwa Ibom.");
-          return;
-        }
         setUserLocation(point);
         setMapCenter(point);
+        if (!isInsideServiceArea(point)) {
+          setLocationNotice("Your current location appears to be outside Nigeria. You can still browse the map.");
+          return;
+        }
         setLocationNotice("");
-      },
-      cause => {
+        if (manuallySelectedPickup.current) return;
+        let place: Place = { ...point, label: coordinateFallbackLabel(point), state: defaultState, lga: defaultLga };
+        try {
+          const resolved = await reverseGeocodePlace(point);
+          place = { ...place, ...resolved, state: resolved.state ?? place.state, lga: resolved.lga ?? place.lga };
+        } catch (cause) {
+          if (import.meta.env.DEV) console.warn("Pickup reverse geocoding failed; using device coordinates.", cause);
+        }
+        if (!active || manuallySelectedPickup.current) return;
+        setPickup(place);
+        setPickupQuery(place.label);
+        setSelectionTarget("destination");
+      })
+      .catch(cause => {
         if (!active) return;
-        setLocationNotice(cause.code === cause.PERMISSION_DENIED
-          ? "Allow location access to pin your position. You can still explore the Akwa Ibom map."
-          : "Your location could not be determined. You can still explore the Akwa Ibom map.");
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
-    );
+        if (import.meta.env.DEV && !(cause instanceof LocationAcquisitionError && cause.failure === "permission_denied")) {
+          console.warn("Could not acquire the device location.", cause);
+        }
+        setLocationNotice(cause instanceof LocationAcquisitionError
+          ? cause.message
+          : "Your location could not be determined. You can still search for a pickup.");
+      });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [defaultState, defaultLga]);
+
+  useEffect(() => {
+    if (userLocation || !defaultState || !defaultLga) return;
+    const controller = new AbortController();
+    void searchPlaces(defaultLga, controller.signal, { state: defaultState, lga: defaultLga })
+      .then(places => { if (places[0]) setMapCenter(places[0]); })
+      .catch(cause => {
+        if (!controller.signal.aborted && import.meta.env.DEV) {
+          console.warn("Could not center the map on the selected service area.", cause);
+        }
+      });
+    return () => controller.abort();
+  }, [defaultState, defaultLga, userLocation]);
 
   const loadActiveRide = useCallback(async () => {
     const { data, error: rpcError } = await supabase.rpc("get_my_active_ride");
@@ -262,6 +290,8 @@ export function RiderBooking() {
         const { data, error: optionsError } = await supabase.rpc("get_ride_vehicle_options", {
           p_pickup_lat: pickup.lat,
           p_pickup_lng: pickup.lng,
+          p_pickup_state: pickup.state ?? defaultState,
+          p_pickup_lga: pickup.lga ?? defaultLga,
           p_route_distance_km: route.distanceKm,
           p_eta_minutes: route.durationMinutes,
         });
@@ -290,7 +320,7 @@ export function RiderBooking() {
       current = false;
       window.clearInterval(timer);
     };
-  }, [activeRide?.id, pickup?.lat, pickup?.lng, destination?.lat, destination?.lng, route?.distanceKm, route?.durationMinutes]);
+  }, [activeRide?.id, pickup?.lat, pickup?.lng, pickup?.state, pickup?.lga, destination?.lat, destination?.lng, route?.distanceKm, route?.durationMinutes, defaultState, defaultLga]);
 
   useEffect(() => {
     const avatarPath = activeRide?.driver?.avatar_path;
@@ -321,7 +351,11 @@ export function RiderBooking() {
       if (trimmedQuery.length < 3 || trimmedQuery === selected?.label) return null;
       return window.setTimeout(() => {
         setSearching(target);
-        void searchPlaces(trimmedQuery, controller.signal)
+        void searchPlaces(trimmedQuery, controller.signal, {
+          state: pickup?.state ?? defaultState,
+          lga: pickup?.lga ?? defaultLga,
+          location: userLocation ?? mapCenter,
+        })
           .then(places => {
             if (target === "pickup") setPickupResults(places);
             else setDestinationResults(places);
@@ -342,7 +376,7 @@ export function RiderBooking() {
         if (timer !== null) window.clearTimeout(timer);
       });
     };
-  }, [pickupQuery, destinationQuery, pickup, destination]);
+  }, [pickupQuery, destinationQuery, pickup, destination, defaultState, defaultLga, userLocation, mapCenter]);
 
   const searchLocation = async (target: "pickup" | "destination") => {
     const query = target === "pickup" ? pickupQuery : destinationQuery;
@@ -351,10 +385,14 @@ export function RiderBooking() {
     if (target === "pickup") setPickupResults([]);
     else setDestinationResults([]);
     try {
-      const places = await searchPlaces(query);
+      const places = await searchPlaces(query, undefined, {
+        state: pickup?.state ?? defaultState,
+        lga: pickup?.lga ?? defaultLga,
+        location: userLocation ?? mapCenter,
+      });
       if (target === "pickup") setPickupResults(places);
       else setDestinationResults(places);
-      if (!places.length) setError("No matching places found in Akwa Ibom. Try a nearby landmark or use the map.");
+      if (!places.length) setError("No matching places found in Nigeria. Try a nearby landmark or use the map.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Place search failed. Please try again.");
     } finally {
@@ -365,6 +403,7 @@ export function RiderBooking() {
   const choosePlace = (target: "pickup" | "destination", place: Place) => {
     setMapCenter(place);
     if (target === "pickup") {
+      manuallySelectedPickup.current = true;
       setPickup(place);
       setPickupQuery(place.label);
       setPickupResults([]);
@@ -378,57 +417,59 @@ export function RiderBooking() {
 
   const selectMapPoint = async (target: "pickup" | "destination", point: Coordinate) => {
     if (!isInsideServiceArea(point)) {
-      setError("Kkary rides are currently available only in Akwa Ibom.");
+      setError("Choose a pickup within Nigeria.");
       return;
     }
+    if (target === "pickup") manuallySelectedPickup.current = true;
     setMapCenter(point);
     setError("");
-    let label = `Pinned location (${point.lat.toFixed(5)}, ${point.lng.toFixed(5)})`;
+    let place: Place = { ...point, label: coordinateFallbackLabel(point), state: defaultState, lga: defaultLga };
     try {
-      label = await reverseGeocode(point);
+      const resolved = await reverseGeocodePlace(point);
+      place = { ...place, ...resolved, state: resolved.state ?? place.state, lga: resolved.lga ?? place.lga };
     } catch (cause) {
       setError(cause instanceof Error ? `${cause.message} Using the map pin coordinates.` : "Address lookup failed. Using the map pin coordinates.");
     }
-    choosePlace(target, { ...point, label });
+    choosePlace(target, place);
   };
 
   const useCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setError("Location access is not available on this device.");
-      return;
-    }
+    manuallySelectedPickup.current = true;
     setLocationBusy(true);
     setError("");
-    navigator.geolocation.getCurrentPosition(
-      position => {
-        const point = { lat: position.coords.latitude, lng: position.coords.longitude };
+    setPickup(null);
+    setRoute(null);
+    void getCurrentDeviceLocation()
+      .then(async point => {
+        setUserLocation(point);
+        setMapCenter(point);
         if (!isInsideServiceArea(point)) {
-          setLocationBusy(false);
-          setLocationNotice("Your location is outside the current service area. Rides are currently available in Akwa Ibom.");
-          setError("Kkary rides are currently available only in Akwa Ibom. Search for a pickup there instead.");
+          setLocationNotice("Your current location appears to be outside Nigeria. You can still browse the map.");
+          setError("Kkary rides are currently available in Nigeria. Search for a pickup in Nigeria instead.");
           return;
         }
-        setUserLocation(point);
         setLocationNotice("");
-        setMapCenter(point);
-        void reverseGeocode(point)
-          .then(label => {
-            const place = { ...point, label };
-            setPickup(place);
-            setPickupQuery(label);
-            setSelectionTarget("destination");
-          })
-          .catch(cause => setError(cause instanceof Error ? cause.message : "Couldn't identify your current location."))
-          .finally(() => setLocationBusy(false));
-      },
-      cause => {
-        setLocationBusy(false);
-        setError(cause.code === cause.PERMISSION_DENIED
-          ? "Allow location access in your browser settings, or search for your pickup."
+        let place: Place = { ...point, label: coordinateFallbackLabel(point), state: defaultState, lga: defaultLga };
+        try {
+          const resolved = await reverseGeocodePlace(point);
+          place = { ...place, ...resolved, state: resolved.state ?? place.state, lga: resolved.lga ?? place.lga };
+        } catch (cause) {
+          if (import.meta.env.DEV) console.warn("Pickup reverse geocoding failed; using device coordinates.", cause);
+          setLocationNotice("Your location is pinned. Address lookup is unavailable, so the pickup uses its coordinates.");
+        }
+        setPickup(place);
+        setPickupQuery(place.label);
+        setSelectionTarget("destination");
+      })
+      .catch(cause => {
+        if (import.meta.env.DEV && !(cause instanceof LocationAcquisitionError && cause.failure === "permission_denied")) {
+          console.warn("Could not acquire the device location.", cause);
+        }
+        setError(cause instanceof LocationAcquisitionError
+          ? cause.message
           : "Your location could not be determined. Search for the pickup instead.");
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
-    );
+      })
+      .finally(() => setLocationBusy(false));
   };
 
   const cancelRide = async () => {
@@ -458,6 +499,8 @@ export function RiderBooking() {
       const { data: freshOptionsData, error: availabilityError } = await supabase.rpc("get_ride_vehicle_options", {
         p_pickup_lat: pickup.lat,
         p_pickup_lng: pickup.lng,
+        p_pickup_state: pickup.state ?? defaultState,
+        p_pickup_lga: pickup.lga ?? defaultLga,
         p_route_distance_km: route.distanceKm,
         p_eta_minutes: route.durationMinutes,
       });
@@ -467,9 +510,9 @@ export function RiderBooking() {
       if (!freshOptions.some(option => option.vehicle_type === vehicleType && Number(option.available_drivers) > 0)) {
         throw new Error("No approved drivers for this vehicle are currently available near your pickup. Choose another vehicle or try again shortly.");
       }
-      const adjustedEta = vehicleType === "bike"
-        ? Math.ceil(route.durationMinutes * 1.25)
-        : route.durationMinutes;
+      const adjustedEta = vehicleType === "car"
+        ? route.durationMinutes
+        : Math.ceil(route.durationMinutes * 1.25);
       const { data, error: rpcError } = await supabase.rpc("request_ride", {
         p_pickup_address: pickup.label,
         p_dropoff_address: destination.label,
@@ -477,8 +520,9 @@ export function RiderBooking() {
         p_pickup_lng: pickup.lng,
         p_dropoff_lat: destination.lat,
         p_dropoff_lng: destination.lng,
+        p_pickup_state: pickup.state ?? defaultState,
         p_vehicle_type: vehicleType,
-        p_pickup_lga: null,
+        p_pickup_lga: pickup.lga ?? defaultLga,
         p_route_distance_km: route.distanceKm,
         p_eta_minutes: adjustedEta,
       });
@@ -497,7 +541,12 @@ export function RiderBooking() {
   };
 
   const driverLocation = activeRide?.driver?.current_lat != null && activeRide.driver.current_lng != null
-    ? { lat: Number(activeRide.driver.current_lat), lng: Number(activeRide.driver.current_lng), name: activeRide.driver.name }
+    ? {
+      lat: Number(activeRide.driver.current_lat),
+      lng: Number(activeRide.driver.current_lng),
+      name: activeRide.driver.name,
+      vehicleType: activeRide.driver.vehicle_type,
+    }
     : null;
   const activePickup = activeRide
     ? { lat: Number(activeRide.pickup_lat), lng: Number(activeRide.pickup_lng), label: activeRide.pickup_address }
@@ -505,6 +554,101 @@ export function RiderBooking() {
   const activeDestination = activeRide
     ? { lat: Number(activeRide.dropoff_lat), lng: Number(activeRide.dropoff_lng), label: activeRide.dropoff_address }
     : destination;
+  useEffect(() => {
+    const reference = activeRide
+      ? { lat: Number(activeRide.pickup_lat), lng: Number(activeRide.pickup_lng) }
+      : pickup ?? userLocation;
+    const state = activeRide?.pickup_state ?? pickup?.state ?? defaultState;
+    const lga = activeRide?.pickup_lga ?? pickup?.lga ?? defaultLga;
+    if (!reference || !state || !lga) {
+      setNearbyVehicles([]);
+      return;
+    }
+    let current = true;
+    setNearbyVehicles([]);
+    const refresh = async () => {
+      const { data, error: nearbyError } = await supabase.rpc("get_nearby_online_drivers", {
+        p_lat: reference.lat,
+        p_lng: reference.lng,
+        p_state: state,
+        p_lga: lga,
+      });
+      if (nearbyError) {
+        if (current) {
+          setNearbyVehicles([]);
+          setError(`Nearby vehicle locations are unavailable: ${nearbyError.message}`);
+        }
+        return;
+      }
+      if (current) {
+        const vehicles = Array.isArray(data) ? data as Array<{
+          vehicle_type: VehicleType;
+          current_lat: number;
+          current_lng: number;
+        }> : [];
+        setNearbyVehicles(vehicles.map(vehicle => ({
+          lat: Number(vehicle.current_lat),
+          lng: Number(vehicle.current_lng),
+          vehicle_type: vehicle.vehicle_type,
+        })));
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 15000);
+    return () => {
+      current = false;
+      window.clearInterval(timer);
+    };
+  }, [
+    activeRide?.id,
+    activeRide?.pickup_lat,
+    activeRide?.pickup_lng,
+    activeRide?.pickup_state,
+    activeRide?.pickup_lga,
+    pickup?.lat,
+    pickup?.lng,
+    pickup?.state,
+    pickup?.lga,
+    userLocation?.lat,
+    userLocation?.lng,
+    defaultState,
+    defaultLga,
+  ]);
+
+  useEffect(() => {
+    const liveDriver = driverLocation;
+    if (!activeRide || !liveDriver || !["driver_assigned", "driver_en_route", "driver_arrived"].includes(activeRide.status)) {
+      setDriverPickupEta(null);
+      setDriverPickupEtaUnavailable(false);
+      return;
+    }
+    const controller = new AbortController();
+    setDriverPickupEtaUnavailable(false);
+    void getRouteEstimate(
+      liveDriver,
+      { lat: Number(activeRide.pickup_lat), lng: Number(activeRide.pickup_lng) },
+      controller.signal,
+    ).then(estimate => {
+      if (!controller.signal.aborted) {
+        setDriverPickupEta(estimate.durationMinutes);
+        setDriverPickupEtaUnavailable(false);
+      }
+    }).catch(cause => {
+      if (!controller.signal.aborted) {
+        setDriverPickupEta(null);
+        setDriverPickupEtaUnavailable(true);
+        if (import.meta.env.DEV) console.warn("Could not estimate the driver's route to pickup.", cause);
+      }
+    });
+    return () => controller.abort();
+  }, [
+    activeRide?.id,
+    activeRide?.status,
+    activeRide?.pickup_lat,
+    activeRide?.pickup_lng,
+    driverLocation?.lat.toFixed(2),
+    driverLocation?.lng.toFixed(2),
+  ]);
   const selectedVehicleOption = vehicleOptions.find(option => option.vehicle_type === vehicleType);
   const fare = selectedVehicleOption ? Number(selectedVehicleOption.estimated_fare) : null;
   const activeStatus = activeRide ? statusText[activeRide.status] ?? activeRide.status : "";
@@ -571,8 +715,21 @@ export function RiderBooking() {
                 </div>
               </div>
               <div className="mt-1 text-[11px] font-semibold capitalize text-[#4c8377]">
-                {activeRide.driver.vehicle_type} · Assigned
+                {(activeRide.driver.vehicle_type === "bike" ? "Motorcycle" : activeRide.driver.vehicle_type === "car" ? "Car" : "Tricycle")} · Assigned
               </div>
+              {["driver_assigned", "driver_en_route", "driver_arrived"].includes(activeRide.status) && (
+                <div className="mt-2 text-xs font-bold text-[#3c766a]">
+                  {activeRide.status === "driver_arrived"
+                    ? "Your driver has arrived at pickup."
+                    : !driverLocation
+                      ? "Waiting for your driver’s live location."
+                    : driverPickupEta !== null
+                      ? `About ${driverPickupEta} min to your pickup.`
+                      : driverPickupEtaUnavailable
+                        ? "Live driver location is shown; ETA is unavailable."
+                        : "Estimating your driver’s arrival…"}
+                </div>
+              )}
             </div>
           )}
           <div className="mt-4">
@@ -581,6 +738,11 @@ export function RiderBooking() {
               destination={activeDestination}
               driver={driverLocation}
               userLocation={userLocation}
+              nearbyVehicles={nearbyVehicles.map(vehicle => ({
+                lat: vehicle.lat,
+                lng: vehicle.lng,
+                vehicleType: vehicle.vehicle_type,
+              }))}
               route={route?.path}
               center={activePickup ?? mapCenter}
               className="h-[300px]"
@@ -618,9 +780,13 @@ export function RiderBooking() {
               pickup={pickup}
               destination={destination}
               userLocation={userLocation}
+              nearbyVehicles={nearbyVehicles.map(vehicle => ({
+                lat: vehicle.lat,
+                lng: vehicle.lng,
+                vehicleType: vehicle.vehicle_type,
+              }))}
               center={mapCenter}
-              initialBounds={akwaIbomMapBounds}
-              initialZoom={9}
+              initialZoom={12}
               route={route?.path}
               selectionTarget={selectionTarget}
               onSelectLocation={selectMapPoint}
@@ -654,7 +820,14 @@ export function RiderBooking() {
           <LocationSearch
             label="Pickup"
             value={pickupQuery}
-            onChange={setPickupQuery}
+            onChange={value => {
+              if (value !== pickup?.label) {
+                manuallySelectedPickup.current = true;
+                setPickup(null);
+                setRoute(null);
+              }
+              setPickupQuery(value);
+            }}
             onSearch={() => void searchLocation("pickup")}
             onChoose={place => choosePlace("pickup", place)}
             isSearching={searching === "pickup"}
@@ -664,7 +837,13 @@ export function RiderBooking() {
           <LocationSearch
             label="Destination"
             value={destinationQuery}
-            onChange={setDestinationQuery}
+            onChange={value => {
+              if (value !== destination?.label) {
+                setDestination(null);
+                setRoute(null);
+              }
+              setDestinationQuery(value);
+            }}
             onSearch={() => void searchLocation("destination")}
             onChoose={place => choosePlace("destination", place)}
             isSearching={searching === "destination"}
@@ -677,7 +856,7 @@ export function RiderBooking() {
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-bold text-[#c0ddd5]">
                   <Navigation className="h-4 w-4 text-[#f4b942]" />
-                  {route.distanceKm.toFixed(1)} km · about {vehicleType === "bike" ? Math.ceil(route.durationMinutes * 1.25) : route.durationMinutes} min
+                  {route.distanceKm.toFixed(1)} km · about {vehicleType === "car" ? route.durationMinutes : Math.ceil(route.durationMinutes * 1.25)} min
                 </div>
                 <div className="text-right">
                   <div className="text-[9px] font-bold uppercase tracking-wider text-[#c0ddd5]">Estimated fare</div>
@@ -688,8 +867,8 @@ export function RiderBooking() {
                   </div>
                 </div>
               </div>
-              <div className="mb-3 grid grid-cols-2 gap-2">
-                {(["bike", "car"] as const).map(vehicle => {
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                {(["bike", "car", "tricycle"] as const).map(vehicle => {
                   const option = vehicleOptions.find(item => item.vehicle_type === vehicle);
                   const available = Number(option?.available_drivers ?? 0);
                   return (
@@ -702,14 +881,17 @@ export function RiderBooking() {
                     >
                       <span className="flex items-center gap-2">
                         {vehicle === "bike" ? <Bike className="h-4 w-4" /> : <Car className="h-4 w-4" />}
-                        {vehicle}
+                        {vehicle === "bike" ? "Motorcycle" : vehicle === "car" ? "Car" : "Tricycle"}
                       </span>
                       <span className="text-[10px]">{loadingVehicleOptions ? "Checking nearby…" : available > 0 ? `${available} nearby · ${formatNaira(Number(option?.estimated_fare))}` : "No drivers nearby"}</span>
                     </button>
                   );
                 })}
               </div>
-              {!loadingVehicleOptions && !vehicleOptions.some(option => Number(option.available_drivers) > 0) && (
+              {!loadingVehicleOptions && !vehicleOptions.length && (
+                <p className="mb-3 text-center text-xs text-[#f4d797]">No vehicle types are enabled for the selected pickup area yet.</p>
+              )}
+              {!loadingVehicleOptions && vehicleOptions.length > 0 && !vehicleOptions.some(option => Number(option.available_drivers) > 0) && (
                 <p className="mb-3 text-center text-xs text-[#f4d797]">No approved drivers are currently available near your pickup. Try again shortly.</p>
               )}
               <button
@@ -718,7 +900,7 @@ export function RiderBooking() {
                 disabled={requesting || loadingRide || loadingVehicleOptions || !selectedVehicleOption || Number(selectedVehicleOption.available_drivers) === 0}
                 className="w-full rounded-xl bg-[#f4b942] px-4 py-3 text-sm font-black text-[#153a3a] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {requesting ? "Requesting ride…" : loadingVehicleOptions ? "Checking nearby drivers…" : !selectedVehicleOption || Number(selectedVehicleOption.available_drivers) === 0 ? "No nearby drivers" : `Request ${vehicleType === "bike" ? "Bike" : "Car"}`}
+                {requesting ? "Requesting ride…" : loadingVehicleOptions ? "Checking nearby drivers…" : !selectedVehicleOption || Number(selectedVehicleOption.available_drivers) === 0 ? "No nearby drivers" : `Request ${vehicleType === "bike" ? "Motorcycle" : vehicleType === "car" ? "Car" : "Tricycle"}`}
               </button>
               <p className="mt-2 text-center text-[10px] text-[#c0ddd5]">Fare is an estimate. Confirm payment with your driver before travel.</p>
             </div>

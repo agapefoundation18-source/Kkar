@@ -4,6 +4,7 @@ import { MapView } from "@/components/Map";
 import AdminMailbox from "@/components/AdminMailbox";
 import { BulkDocumentReview, CommissionHistory, SandboxPaymentTest } from "@/components/AdminEnhancements";
 import { PricingRulesManager } from "@/components/PricingRulesManager";
+import { AdminVehicleAreas } from "@/components/AdminVehicleAreas";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,11 +13,12 @@ import { toast } from "sonner";
 import { ArrowRight, Bike, CalendarClock, Check, ChevronRight, CircleAlert, CreditCard, Download, FileCheck2, KeyRound, LayoutDashboard, Mail as MailboxIcon, Mail as MailIcon, MapPin, Navigation, Plus, Rocket, ShieldCheck, Users, WalletCards, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
+import { BrandLogo } from "@/components/BrandLogo";
 
 type Section = "overview" | "drivers" | "finance" | "admins" | "messages" | "mailbox" | "releases" | "launch" | "profile";
 const money = (kobo: number) => `₦${Math.round(kobo / 100).toLocaleString("en-NG")}`;
 
-function Mark() { return <div className="flex items-center gap-2"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f4b942] text-[#113a3b]"><Navigation className="h-5 w-5 fill-current" /></div><div><div className="text-[16px] font-black tracking-[-0.06em] text-[#113a3b]">Kkary</div><div className="text-[8px] font-black uppercase tracking-[0.15em] text-[#7e9691]">Admin console</div></div></div>; }
+function Mark() { return <div className="flex items-center gap-2"><BrandLogo className="h-9 w-9 rounded-xl" /><div><div className="text-[16px] font-black tracking-[-0.06em] text-[#113a3b]">Kkary</div><div className="text-[8px] font-black uppercase tracking-[0.15em] text-[#7e9691]">Admin console</div></div></div>; }
 
 function Login() {
   const [username, setUsername] = useState("");
@@ -216,6 +218,12 @@ function LaunchPageSettings({ onOpenMailbox }: { onOpenMailbox: () => void }) {
     <Card className="rounded-[26px] border-[#e0ece8]">
       <CardHeader><CardTitle className="text-base text-[#193d3c]">Coming soon page</CardTitle></CardHeader>
       <CardContent>
+        {status.error && (
+          <div role="alert" className="mb-4 rounded-xl bg-[#fff2ef] p-3 text-sm text-[#a85d52]">
+            Could not load saved launch settings: {status.error.message}
+            <Button type="button" variant="outline" onClick={() => void status.refetch()} className="ml-2 rounded-lg">Retry</Button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-[#f5faf7] p-4">
           <div>
             <div className="text-sm font-extrabold text-[#355754]">{enabled ? "Coming soon page is enabled" : "Rider and Driver apps are public"}</div>
@@ -232,7 +240,7 @@ function LaunchPageSettings({ onOpenMailbox }: { onOpenMailbox: () => void }) {
         {enabled && !launchAt && <p className="mt-2 text-xs font-semibold text-[#aa6d27]">Choose a date and time before enabling the page.</p>}
         <Button
           onClick={() => save.mutate({ enabled, launchAt: launchAt ? new Date(launchAt).toISOString() : null })}
-          disabled={status.isLoading || save.isPending || (enabled && !launchAt)}
+          disabled={status.isLoading || Boolean(status.error) || save.isPending || (enabled && !launchAt)}
           className="mt-5 h-11 rounded-xl bg-[#113a3b] px-5 text-white hover:bg-[#1e5555]"
         >
           {save.isPending ? "Saving…" : "Save launch settings"}
@@ -242,14 +250,21 @@ function LaunchPageSettings({ onOpenMailbox }: { onOpenMailbox: () => void }) {
     <Card className="rounded-[26px] border-[#e0ece8]">
       <CardHeader><CardTitle className="text-base text-[#193d3c]">Launch waitlist mailbox</CardTitle></CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-4">
-        <p className="text-sm text-[#78918e]">{waitlist.isLoading ? "Loading waitlist…" : waitlist.error ? waitlist.error.message : `${waitlist.data?.length ?? 0} people have joined. View recipients and prepare a personalized announcement in Mailbox.`}</p>
+        <div className="text-sm text-[#78918e]">
+          {waitlist.isLoading ? "Loading waitlist…" : waitlist.error ? (
+            <span role="alert">
+              {waitlist.error.message}
+              <Button type="button" variant="outline" onClick={() => void waitlist.refetch()} className="ml-2 rounded-lg">Retry</Button>
+            </span>
+          ) : `${waitlist.data?.length ?? 0} people have joined. View recipients and prepare a personalized announcement in Mailbox.`}
+        </div>
         <Button onClick={onOpenMailbox} className="rounded-xl bg-[#113a3b] text-white hover:bg-[#1e5555]"><MailboxIcon className="mr-2 h-4 w-4" /> Open mailbox</Button>
       </CardContent>
     </Card>
   </div>;
 }
 
-function LiveMap({ drivers }: { drivers: Array<{ id: number; defaultLga: string; currentLat: number | null; currentLng: number | null }> }) {
+function LiveMap({ drivers }: { drivers: Array<{ id: string; defaultLga: string; currentLat: number; currentLng: number }> }) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   useEffect(() => {
@@ -258,15 +273,29 @@ function LiveMap({ drivers }: { drivers: Array<{ id: number; defaultLga: string;
     markersRef.current = drivers.filter(driver => driver.currentLat !== null && driver.currentLng !== null).map(driver => new google.maps.marker.AdvancedMarkerElement({ map: mapRef.current!, position: { lat: Number(driver.currentLat), lng: Number(driver.currentLng) }, title: `Driver #${driver.id} · ${driver.defaultLga}` }));
     return () => { markersRef.current.forEach(marker => { marker.map = null; }); };
   }, [drivers]);
-  return <Card className="overflow-hidden rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Network map</CardTitle><p className="mt-1 text-xs text-[#89a19d]">Online driver signals across Akwa Ibom · auto-refreshing</p></CardHeader><CardContent className="p-0"><MapView className="h-[360px]" initialCenter={{ lat: 5.0513, lng: 7.9335 }} initialZoom={9} onMapReady={map => { mapRef.current = map; }} /></CardContent></Card>;
+  return <Card className="overflow-hidden rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Network map</CardTitle><p className="mt-1 text-xs text-[#89a19d]">Recent online driver locations across Nigeria · refreshes every 5 seconds</p></CardHeader><CardContent className="p-0"><MapView className="h-[360px]" initialCenter={{ lat: 9.08, lng: 7.49 }} initialZoom={6} onMapReady={map => { mapRef.current = map; }} /></CardContent></Card>;
 }
 
 function Overview() {
   const snapshot = trpc.operations.snapshot.useQuery();
   const liveDrivers = trpc.operations.liveDrivers.useQuery(undefined, { refetchInterval: 5000 });
-  const data = snapshot.data ?? { riderCount: 0, driverCount: 0, activeDriverCount: 0, activeRideCount: 0, completedRideCount: 0, cancelledRideCount: 0, revenueKobo: 0 };
-  const stats = [{ label: "Registered riders", value: data.riderCount.toLocaleString(), icon: Users }, { label: "Online drivers", value: data.activeDriverCount.toLocaleString(), icon: Bike }, { label: "Live trips", value: data.activeRideCount.toLocaleString(), icon: Navigation }, { label: "Gross revenue", value: money(data.revenueKobo), icon: WalletCards }];
-  return <div className="space-y-6"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Overview</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">The network, live.</h1><p className="mt-2 text-sm text-[#7b9490]">A live view of the Kkary network across Akwa Ibom.</p></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{stats.map(stat => <div key={stat.label} className="rounded-2xl border border-[#e0ece8] bg-white p-4"><div className="flex items-center justify-between"><div className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8ba39e]">{stat.label}</div><stat.icon className="h-4 w-4 text-[#65a296]" /></div><div className="mt-3 text-2xl font-black tracking-[-0.05em] text-[#234744]">{stat.value}</div></div>)}</div><div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]"><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader className="flex-row items-center justify-between space-y-0"><div><CardTitle className="text-base text-[#193d3c]">Live driver signals</CardTitle><p className="mt-1 text-xs text-[#89a19d]">Refreshes every 5 seconds</p></div><Badge className="bg-[#e6f5ee] text-[#3a8c78] hover:bg-[#e6f5ee]">{liveDrivers.data?.length ?? 0} online</Badge></CardHeader><CardContent className="space-y-2">{liveDrivers.data?.length ? liveDrivers.data.map(driver => <div key={driver.id} className="flex items-center gap-3 rounded-xl bg-[#f6faf8] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#dff1e8] text-[#398c78]"><MapPin className="h-4 w-4" /></div><div className="flex-1"><div className="text-sm font-bold text-[#456660]">Driver #{driver.id} · {driver.defaultLga}</div><div className="text-[10px] text-[#8aa29d]">{driver.currentLat?.toFixed(4)}, {driver.currentLng?.toFixed(4)}</div></div><span className="h-2 w-2 rounded-full bg-[#4ea88e]" /></div>) : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-10 text-center text-sm text-[#87a09a]">No live driver location signals yet.</div>}</CardContent></Card><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Control notes</CardTitle></CardHeader><CardContent className="space-y-3 text-sm text-[#718b86]"><div className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-[#4c9c87]" /> Commission changes are audited</div><div className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-[#4c9c87]" /> Driver decisions notify applicants</div><div className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-[#4c9c87]" /> Location heartbeats are timestamped</div><div className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-[#4c9c87]" /> Monnify credits require verification</div></CardContent></Card></div><LiveMap drivers={liveDrivers.data ?? []} /></div>;
+  const stats = [
+    { label: "Registered riders", value: snapshot.data ? snapshot.data.riderCount.toLocaleString() : snapshot.isLoading ? "…" : "Unavailable", icon: Users },
+    { label: "Online drivers", value: snapshot.data ? snapshot.data.activeDriverCount.toLocaleString() : snapshot.isLoading ? "…" : "Unavailable", icon: Bike },
+    { label: "Live trips", value: snapshot.data ? snapshot.data.activeRideCount.toLocaleString() : snapshot.isLoading ? "…" : "Unavailable", icon: Navigation },
+    { label: "Completed trip value", value: snapshot.data ? money(snapshot.data.revenueKobo) : snapshot.isLoading ? "…" : "Unavailable", icon: WalletCards },
+  ];
+  return <div className="space-y-6"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Overview</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">The network, live.</h1><p className="mt-2 text-sm text-[#7b9490]">A live view of the Kkary network across Nigeria.</p></div>
+    {snapshot.error && <div role="alert" className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">Could not load Supabase operations data: {snapshot.error.message}<Button type="button" variant="outline" onClick={() => void snapshot.refetch()} className="ml-2 rounded-lg">Retry</Button></div>}
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{stats.map(stat => <div key={stat.label} className="rounded-2xl border border-[#e0ece8] bg-white p-4"><div className="flex items-center justify-between"><div className="text-[10px] font-black uppercase tracking-[0.12em] text-[#8ba39e]">{stat.label}</div><stat.icon className="h-4 w-4 text-[#65a296]" /></div><div className="mt-3 text-2xl font-black tracking-[-0.05em] text-[#234744]">{stat.value}</div></div>)}</div>
+    <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]"><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader className="flex-row items-center justify-between space-y-0"><div><CardTitle className="text-base text-[#193d3c]">Live driver signals</CardTitle><p className="mt-1 text-xs text-[#89a19d]">Recent online locations refresh every 5 seconds</p></div><Badge className="bg-[#e6f5ee] text-[#3a8c78] hover:bg-[#e6f5ee]">{liveDrivers.data?.length ?? 0} online</Badge></CardHeader><CardContent className="space-y-2">
+      {liveDrivers.isLoading ? <div className="p-5 text-sm text-[#87a09a]">Loading live drivers…</div>
+        : liveDrivers.error ? <div role="alert" className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">Could not load live drivers: {liveDrivers.error.message}<Button type="button" variant="outline" onClick={() => void liveDrivers.refetch()} className="ml-2 rounded-lg">Retry</Button></div>
+          : liveDrivers.data?.length ? liveDrivers.data.map(driver => <div key={driver.id} className="flex items-center gap-3 rounded-xl bg-[#f6faf8] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#dff1e8] text-[#398c78]"><MapPin className="h-4 w-4" /></div><div className="flex-1"><div className="text-sm font-bold text-[#456660]">Driver · {driver.defaultLga || "Service area unavailable"}</div><div className="text-[10px] text-[#8aa29d]">{driver.currentLat.toFixed(4)}, {driver.currentLng.toFixed(4)}</div></div><span className="h-2 w-2 rounded-full bg-[#4ea88e]" /></div>)
+            : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-10 text-center text-sm text-[#87a09a]">No recent online driver location signals.</div>}
+    </CardContent></Card><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Control notes</CardTitle></CardHeader><CardContent className="space-y-3 text-sm text-[#718b86]"><div className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-[#4c9c87]" /> Commission changes are audited</div><div className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-[#4c9c87]" /> Driver decisions notify applicants</div><div className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-[#4c9c87]" /> Location heartbeats are timestamped</div><div className="flex gap-2"><Check className="h-4 w-4 shrink-0 text-[#4c9c87]" /> Monnify credits require verification</div></CardContent></Card></div>
+    <LiveMap drivers={liveDrivers.data ?? []} />
+  </div>;
 }
 
 function SupabaseDriverReview() {
@@ -302,8 +331,9 @@ function SupabaseDriverReview() {
       const result = await reviewUrl.mutateAsync({ documentId });
       if (reviewWindow) reviewWindow.location.href = result.url;
       else window.location.assign(result.url);
-    } catch {
+    } catch (cause) {
       reviewWindow?.close();
+      toast.error(cause instanceof Error ? cause.message : "Could not open the private driver document.");
     }
   };
   const docName: Record<string, string> = {
@@ -311,6 +341,8 @@ function SupabaseDriverReview() {
     nin: "NIN",
     motorcycle_registration: "Motorcycle registration",
     motorcycle_insurance: "Motorcycle insurance",
+    tricycle_registration: "Tricycle registration",
+    tricycle_insurance: "Tricycle insurance",
     car_registration: "Car registration",
     car_insurance: "Car insurance",
   };
@@ -323,7 +355,7 @@ function SupabaseDriverReview() {
       <CardContent className="space-y-3">
         {applications.isLoading ? <div className="p-5 text-sm text-[#87a09a]">Loading applications…</div>
           : applications.error ? <div className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">{applications.error.message}</div>
-            : applications.data?.length ? applications.data.map(application => <div key={application.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e2eee9] p-4"><div><div className="text-sm font-extrabold text-[#355754]">{application.profiles?.full_name || "Driver applicant"}</div><div className="mt-1 text-xs text-[#819a95]">{application.vehicle_color} {application.vehicle_make} {application.vehicle_model} · {application.vehicle_type === "bike" ? "Motorcycle" : "Car"} · {application.plate_number}</div><div className="mt-1 text-[10px] text-[#8ca39e]">{application.profiles?.email || "No email on profile"}</div></div><Button onClick={() => approve.mutate({ driverId: application.id })} disabled={approve.isPending} size="sm" className="rounded-lg bg-[#3f967f] text-white hover:bg-[#347f6c]"><Check className="mr-1.5 h-3.5 w-3.5" /> Approve driver</Button></div>)
+            : applications.data?.length ? applications.data.map(application => <div key={application.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e2eee9] p-4"><div><div className="text-sm font-extrabold text-[#355754]">{application.profiles?.full_name || "Driver applicant"}</div><div className="mt-1 text-xs text-[#819a95]">{application.vehicle_color} {application.vehicle_make} {application.vehicle_model} · {application.vehicle_type === "bike" ? "Motorcycle" : application.vehicle_type === "car" ? "Car" : "Tricycle"} · {application.plate_number}</div><div className="mt-1 text-[10px] text-[#8ca39e]">{application.profiles?.email || "No email on profile"}</div></div><Button onClick={() => approve.mutate({ driverId: application.id })} disabled={approve.isPending} size="sm" className="rounded-lg bg-[#3f967f] text-white hover:bg-[#347f6c]"><Check className="mr-1.5 h-3.5 w-3.5" /> Approve driver</Button></div>)
               : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-8 text-center text-sm text-[#87a09a]">No Kkary app applications waiting for review.</div>}
       </CardContent>
     </Card>
@@ -347,8 +379,20 @@ function DriverReview() {
   const utils = trpc.useUtils();
   const applications = trpc.operations.driverApplications.useQuery();
   const documents = trpc.operations.driverDocuments.useQuery();
-  const reviewDriver = trpc.operations.reviewDriver.useMutation({ onSuccess: async () => { toast.success("Driver decision saved"); await Promise.all([utils.operations.driverApplications.invalidate(), utils.operations.driverDocuments.invalidate()]); } });
-  const reviewDocument = trpc.operations.reviewDocument.useMutation({ onSuccess: async () => { toast.success("Document decision saved"); await utils.operations.driverDocuments.invalidate(); } });
+  const reviewDriver = trpc.operations.reviewDriver.useMutation({
+    onSuccess: async () => {
+      toast.success("Driver decision saved");
+      await Promise.all([utils.operations.driverApplications.invalidate(), utils.operations.driverDocuments.invalidate()]);
+    },
+    onError: error => toast.error(error.message),
+  });
+  const reviewDocument = trpc.operations.reviewDocument.useMutation({
+    onSuccess: async () => {
+      toast.success("Document decision saved");
+      await utils.operations.driverDocuments.invalidate();
+    },
+    onError: error => toast.error(error.message),
+  });
   return <div className="space-y-6"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Driver review</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Approve the network.</h1><p className="mt-2 text-sm text-[#7b9490]">Review driver profiles and every uploaded document before they can go online.</p></div><SupabaseDriverReview /><div className="grid gap-6 xl:grid-cols-[1fr_1fr]"><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader className="flex-row items-center justify-between space-y-0"><CardTitle className="text-base text-[#193d3c]">Pending applications</CardTitle><Badge className="bg-[#fff3d7] text-[#a8781d] hover:bg-[#fff3d7]">{applications.data?.length ?? 0} pending</Badge></CardHeader><CardContent className="space-y-3">{applications.data?.length ? applications.data.map(application => <div key={application.id} className="rounded-2xl border border-[#e2eee9] p-4"><div className="flex items-start justify-between"><div><div className="text-sm font-extrabold text-[#355754]">Driver #{application.id}</div><div className="mt-1 text-xs text-[#819a95]">{application.vehicleType} · {application.defaultLga} · {application.plateNumber}</div></div><Badge variant="outline" className="border-[#ecd9a7] text-[#a77a22]">Pending</Badge></div><div className="mt-4 flex gap-2"><Button onClick={() => reviewDriver.mutate({ driverId: application.id, decision: "approved" })} size="sm" className="rounded-lg bg-[#3f967f] text-white hover:bg-[#347f6c]"><Check className="mr-1.5 h-3.5 w-3.5" /> Approve</Button><Button onClick={() => reviewDriver.mutate({ driverId: application.id, decision: "rejected" })} size="sm" variant="outline" className="rounded-lg border-[#edc5bd] text-[#bd7063]"><X className="mr-1.5 h-3.5 w-3.5" /> Reject</Button></div></div>) : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-10 text-center text-sm text-[#87a09a]">No applications waiting for review.</div>}</CardContent></Card><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader className="flex-row items-center justify-between space-y-0"><CardTitle className="text-base text-[#193d3c]">Documents queue</CardTitle><FileCheck2 className="h-5 w-5 text-[#76a49b]" /></CardHeader><CardContent className="space-y-3">{documents.data?.length ? documents.data.map(document => <div key={document.id} className="flex items-center gap-3 rounded-2xl bg-[#f6faf8] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e4f2eb] text-[#408d7b]"><FileCheck2 className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold text-[#42635e]">{document.documentType.replaceAll("_", " ")}</div><div className="text-[10px] text-[#8ca39e]">Driver #{document.driverId} · <a href={document.url} target="_blank" rel="noreferrer" className="text-[#3f8b79] underline">{document.originalFileName}</a></div></div><div className="flex gap-1.5"><button onClick={() => reviewDocument.mutate({ documentId: document.id, decision: "approved" })} className="rounded-lg bg-[#e4f3eb] px-2.5 py-2 text-[#3d8e7b] hover:bg-[#d5ecdf]"><Check className="h-3.5 w-3.5" /></button><button onClick={() => reviewDocument.mutate({ documentId: document.id, decision: "rejected", rejectionReason: "Please upload a clearer document" })} className="rounded-lg bg-[#fff0ed] px-2.5 py-2 text-[#c4776a] hover:bg-[#ffe3df]"><X className="h-3.5 w-3.5" /></button></div></div>) : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-10 text-center text-sm text-[#87a09a]">No documents waiting for review.</div>}</CardContent></Card></div><BulkDocumentReview /></div>;
 }
 
@@ -357,19 +401,29 @@ function Finance() {
   const utils = trpc.useUtils();
   const updateShare = trpc.operations.updateRevenueShare.useMutation({ onSuccess: async () => { toast.success("Revenue share updated"); await utils.operations.pricing.invalidate(); } });
   const [commission, setCommission] = useState("20");
-  return <div className="space-y-8"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Finance</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Keep the maths honest.</h1><p className="mt-2 text-sm text-[#7b9490]">Manage global revenue share and per-LGA pricing rules for all vehicle types.</p></div><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Driver income percentage (global)</CardTitle></CardHeader><CardContent><div className="rounded-2xl bg-[#edf7f2] p-5"><div className="text-[10px] font-black uppercase tracking-[0.13em] text-[#69948b]">Current platform share</div><div className="mt-2 text-4xl font-black tracking-[-0.06em] text-[#2e7568]">{pricing.data?.[0] ? `${(pricing.data[0].commissionBps / 100).toFixed(0)}%` : "20%"}</div><p className="mt-2 text-xs leading-relaxed text-[#78948d]">If platform share is 20%, the driver income share is 80%. This applies as a base across all active pricing rules.</p></div><label className="mt-5 block"><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.13em] text-[#809a94]">Set platform share (%)</span><Input type="number" min="0" max="100" value={commission} onChange={event => setCommission(event.target.value)} className="h-12 rounded-xl" /></label><Button onClick={() => updateShare.mutate({ commissionBps: Math.round(Number(commission) * 100) })} disabled={updateShare.isPending} className="mt-4 h-12 w-full rounded-xl bg-[#113a3b] text-white">{updateShare.isPending ? "Saving…" : "Save revenue share"}</Button></CardContent></Card><PricingRulesManager /></div>;
+  return <div className="space-y-8"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Finance</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Keep the maths honest.</h1><p className="mt-2 text-sm text-[#7b9490]">Manage global revenue share and per-LGA pricing rules for all vehicle types.</p></div><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Driver income percentage (global)</CardTitle></CardHeader><CardContent><div className="rounded-2xl bg-[#edf7f2] p-5"><div className="text-[10px] font-black uppercase tracking-[0.13em] text-[#69948b]">Current platform share</div><div className="mt-2 text-4xl font-black tracking-[-0.06em] text-[#2e7568]">{pricing.data?.[0] ? `${(pricing.data[0].commissionBps / 100).toFixed(0)}%` : "20%"}</div><p className="mt-2 text-xs leading-relaxed text-[#78948d]">If platform share is 20%, the driver income share is 80%. This applies as a base across all active pricing rules.</p></div><label className="mt-5 block"><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.13em] text-[#809a94]">Set platform share (%)</span><Input type="number" min="0" max="100" value={commission} onChange={event => setCommission(event.target.value)} className="h-12 rounded-xl" /></label><Button onClick={() => updateShare.mutate({ commissionBps: Math.round(Number(commission) * 100) })} disabled={updateShare.isPending} className="mt-4 h-12 w-full rounded-xl bg-[#113a3b] text-white">{updateShare.isPending ? "Saving…" : "Save revenue share"}</Button></CardContent></Card><AdminVehicleAreas /><PricingRulesManager /></div>;
 }
 
 function Admins() {
   const admins = trpc.operations.admins.useQuery();
-  const create = trpc.admin.createUser.useMutation({ onSuccess: async () => { toast.success("Administrator created"); await admins.refetch(); } });
+  const create = trpc.admin.createUser.useMutation({
+    onSuccess: async () => {
+      toast.success("Administrator created");
+      await admins.refetch();
+    },
+    onError: error => toast.error(error.message),
+  });
   const [username, setUsername] = useState(""); const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [role, setRole] = useState<"admin" | "super_admin">("admin"); const [password, setPassword] = useState("");
   return <div className="space-y-6"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Administrators</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Control access carefully.</h1><p className="mt-2 text-sm text-[#7b9490]">Only a super-admin can create another admin or super-admin. Every new credential must change its temporary password.</p></div><div className="grid gap-6 xl:grid-cols-[1fr_1fr]"><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Create administrator</CardTitle></CardHeader><CardContent><form onSubmit={event => { event.preventDefault(); create.mutate({ username, name, email: email || undefined, role, password }); }} className="space-y-3"><Input value={username} onChange={event => setUsername(event.target.value)} placeholder="Username" className="h-11 rounded-xl" /><Input value={name} onChange={event => setName(event.target.value)} placeholder="Full name" className="h-11 rounded-xl" /><Input value={email} onChange={event => setEmail(event.target.value)} placeholder="Email (optional)" className="h-11 rounded-xl" /><select value={role} onChange={event => setRole(event.target.value as "admin" | "super_admin")} className="h-11 w-full rounded-xl border border-[#dcebe5] bg-white px-3 text-sm"><option value="admin">Admin</option><option value="super_admin">Super-admin</option></select><Input value={password} onChange={event => setPassword(event.target.value)} placeholder="Temporary password (10+ characters)" type="password" className="h-11 rounded-xl" /><Button disabled={create.isPending || password.length < 10} className="h-11 w-full rounded-xl bg-[#113a3b] text-white">{create.isPending ? "Creating…" : "Create credential"}</Button></form></CardContent></Card><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Current administrators</CardTitle></CardHeader><CardContent className="space-y-2">{admins.data?.length ? admins.data.map(admin => <div key={admin.id} className="flex items-center gap-3 rounded-xl bg-[#f6faf8] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e5f2ec] text-[#3c8b78]"><Users className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="text-sm font-bold text-[#42635e]">{admin.name || admin.username}</div><div className="text-[10px] text-[#8aa29d]">@{admin.username} · {admin.role}</div></div>{admin.mustChangePassword && <Badge className="bg-[#fff3d7] text-[#a8781d] hover:bg-[#fff3d7]">Password reset</Badge>}</div>) : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-10 text-center text-sm text-[#87a09a]">No credentials found yet.</div>}</CardContent></Card></div></div>;
 }
 
 function Mail() {
-  const { data: mail, isLoading, refetch } = trpc.admin.listReceivedMail.useQuery({ page: 0, limit: 20, unreadOnly: false });
-  const markAsRead = trpc.admin.markMailAsRead.useMutation({ onSuccess: () => refetch() });
+  const mailQuery = trpc.admin.listReceivedMail.useQuery({ page: 0, limit: 20, unreadOnly: false });
+  const { data: mail, isLoading, refetch } = mailQuery;
+  const markAsRead = trpc.admin.markMailAsRead.useMutation({
+    onSuccess: () => refetch(),
+    onError: error => toast.error(error.message),
+  });
   const [expandedId, setExpandedId] = useState<number | null>(null);
   return (
     <div className="space-y-6">
@@ -385,6 +439,11 @@ function Mail() {
         <CardContent>
           {isLoading ? (
             <div className="text-center py-8 text-sm text-[#89a19d]">Loading messages...</div>
+          ) : mailQuery.error ? (
+            <div role="alert" className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">
+              <p>Could not load messages: {mailQuery.error.message}</p>
+              <Button type="button" variant="outline" onClick={() => void refetch()} className="mt-3 rounded-xl">Retry</Button>
+            </div>
           ) : !mail?.length ? (
             <div className="rounded-2xl border border-dashed border-[#cfe2db] p-10 text-center text-sm text-[#87a09a]">No messages yet.</div>
           ) : (
@@ -399,8 +458,10 @@ function Mail() {
                     </div>
                     {!msg.readAt && (
                       <button
+                        type="button"
+                        disabled={markAsRead.isPending}
                         onClick={() => markAsRead.mutate({ messageId: msg.id })}
-                        className="text-xs bg-[#113a3b] text-white px-2 py-1 rounded whitespace-nowrap"
+                        className="text-xs bg-[#113a3b] text-white px-2 py-1 rounded whitespace-nowrap disabled:opacity-60"
                       >
                         Mark read
                       </button>
@@ -410,6 +471,7 @@ function Mail() {
                     <div className="mt-3 pt-3 border-t border-[#d4e8e2] text-sm text-[#42635e] leading-relaxed">{msg.messageBody}</div>
                   )}
                   <button
+                    type="button"
                     onClick={() => setExpandedId(expandedId === msg.id ? null : msg.id)}
                     className="mt-2 text-xs text-[#2f7e70] hover:text-[#1e5555] font-semibold"
                   >

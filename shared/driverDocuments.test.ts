@@ -20,6 +20,15 @@ describe("driver document checklist", () => {
     ]);
   });
 
+  it("requires identity and tricycle-specific documents", () => {
+    expect(requiredDriverDocuments("tricycle")).toEqual([
+      "drivers_license",
+      "nin",
+      "tricycle_registration",
+      "tricycle_insurance",
+    ]);
+  });
+
   it("does not verify a driver until every required document is approved", () => {
     const documents = requiredDriverDocuments("bike").map(document_type => ({
       document_type,

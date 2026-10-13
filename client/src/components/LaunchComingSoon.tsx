@@ -1,9 +1,10 @@
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowRight, Check, Clock3, Mail, Navigation } from "lucide-react";
+import { ArrowRight, Check, Clock3, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/BrandLogo";
 
 function getCountdown(launchAt: string | null) {
   const remaining = launchAt ? Math.max(0, new Date(launchAt).getTime() - Date.now()) : 0;
@@ -49,9 +50,7 @@ export default function LaunchComingSoon({ launchAt }: { launchAt: string | null
       <div className="relative mx-auto grid w-full max-w-[1080px] items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
         <section>
           <div className="mb-12 flex items-center gap-2.5">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f4b942] text-[#102a2c]">
-              <Navigation className="h-5 w-5 fill-current" strokeWidth={2.5} />
-            </div>
+            <BrandLogo className="h-11 w-11 rounded-2xl" />
             <div>
               <div className="text-[20px] font-black tracking-[-0.07em]">Kkary</div>
               <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-[#9fcfc2]">Move local</div>
@@ -64,7 +63,7 @@ export default function LaunchComingSoon({ launchAt }: { launchAt: string | null
             A better way to move is <span className="text-[#f4c24d]">almost here.</span>
           </h1>
           <p className="mt-6 max-w-[520px] text-base leading-relaxed text-[#bad5d1] sm:text-lg">
-            Kkary is getting ready to connect riders and trusted local drivers across Akwa Ibom. Join the waitlist and we’ll let you know when we launch.
+            Kkary is getting ready to connect riders and trusted local drivers across Nigeria. Join the waitlist and we’ll let you know when we launch.
           </p>
           <div className="mt-9 grid max-w-[540px] grid-cols-4 gap-2.5 sm:gap-3">
             {units.map(unit => (

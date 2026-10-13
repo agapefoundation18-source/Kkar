@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { getActivePricingRules, getDb, getDriverByUserId, getDriverDocuments, getDriverSummary, getLiveRide, getNotifications, getOperationsSnapshot, getRiderRides, getUserById, getUserByUsername, getWalletDetails, getWalletSummary } from "./db";
+import { getActivePricingRules, getDb, getDriverByUserId, getDriverDocuments, getDriverSummary, getLiveRide, getNotifications, getRiderRides, getUserById, getUserByUsername, getWalletDetails, getWalletSummary } from "./db";
 import { auditLogs, driverDocuments, driverEarnings, driverLocations, drivers, notifications, platformSettings, pricingRules, rideEvents, rides, users, adminMessages } from "../drizzle/schema";
 import { createReservedAccount, initializeWalletFunding, processMonnifyWebhook, verifyMonnifyPayment } from "./monnify";
 import { storagePut } from "./storage";
@@ -17,6 +17,7 @@ import { allowedTransitions } from "./rideState";
 import { detectLgaFromCoordinates, getLgas, isValidLga } from "./_core/lga";
 import { compareSemanticVersions, parseSemanticVersion } from "@shared/appRelease";
 import { hasVerifiedDriverDocuments } from "@shared/driverDocuments";
+import { isNigerianStateLga } from "@shared/nigeriaLocations";
 
 const vehicleType = z.enum(["bike", "car"]);
 const rideStatus = z.enum(["requested", "matching", "driver_assigned", "driver_en_route", "driver_arrived", "trip_started", "trip_completed", "payment_processing", "completed", "cancelled_by_rider", "cancelled_by_driver", "cancelled_no_driver", "payment_failed"]);
@@ -64,7 +65,7 @@ async function getLaunchMode(db: NonNullable<Awaited<ReturnType<typeof getDb>>>)
 type SupabaseDriverApplication = {
   id: string;
   profile_id: string;
-  vehicle_type: "bike" | "car";
+  vehicle_type: "bike" | "car" | "tricycle";
   vehicle_make: string | null;
   vehicle_model: string | null;
   vehicle_color: string | null;
@@ -83,7 +84,7 @@ type SupabaseDriverDocument = {
   rejection_reason: string | null;
   created_at: string;
   driver_profiles: {
-    vehicle_type: "bike" | "car";
+    vehicle_type: "bike" | "car" | "tricycle";
     profiles: { full_name: string; email: string | null } | null;
   } | null;
 };
@@ -834,11 +835,36 @@ export const appRouter = router({
       });
       return { success: true, release } as const;
     }),
-    snapshot: adminProcedure.query(async () => getOperationsSnapshot()),
+    snapshot: adminProcedure.query(async () => supabaseAdminRequest<{
+      riderCount: number;
+      driverCount: number;
+      activeDriverCount: number;
+      activeRideCount: number;
+      completedRideCount: number;
+      cancelledRideCount: number;
+      revenueKobo: number;
+    }>("rpc/admin_dashboard_snapshot", { method: "POST", body: "{}" })),
     liveDrivers: adminProcedure.query(async () => {
-      const db = await getDb();
-      if (!db) return [];
-      return db.select({ id: drivers.id, defaultLga: drivers.defaultLga, status: drivers.status, currentLat: drivers.currentLat, currentLng: drivers.currentLng, lastLocationAt: drivers.lastLocationAt }).from(drivers).where(eq(drivers.status, "online"));
+      const recentSince = encodeURIComponent(new Date(Date.now() - 2 * 60_000).toISOString());
+      const rows = await supabaseAdminRequest<Array<{
+        id: string;
+        state: string | null;
+        lga: string | null;
+        vehicle_type: "bike" | "car" | "tricycle";
+        current_lat: number;
+        current_lng: number;
+        location_updated_at: string;
+      }>>(
+        `driver_profiles?select=id,state,lga,vehicle_type,current_lat,current_lng,location_updated_at&is_online=eq.true&is_approved=eq.true&location_updated_at=gte.${recentSince}&current_lat=not.is.null&current_lng=not.is.null&order=location_updated_at.desc&limit=200`,
+      );
+      return rows.map(driver => ({
+        id: driver.id,
+        defaultLga: [driver.lga, driver.state].filter(Boolean).join(", "),
+        vehicleType: driver.vehicle_type,
+        currentLat: Number(driver.current_lat),
+        currentLng: Number(driver.current_lng),
+        lastLocationAt: driver.location_updated_at,
+      }));
     }),
     pricing: adminProcedure.query(async () => getActivePricingRules()),
     allPricingRules: adminProcedure.query(async () => {
@@ -885,6 +911,52 @@ export const appRouter = router({
       if (!db) return [];
       return db.select().from(rides).orderBy(desc(rides.createdAt)).limit(20);
     }),
+    serviceVehicleAreas: adminProcedure
+      .input(z.object({ state: z.string().min(1), lga: z.string().min(1) }))
+      .query(async ({ input }) => {
+        if (!isNigerianStateLga(input.state, input.lga)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a valid Nigerian state and L.G.A." });
+        }
+        return supabaseAdminRequest<Array<{ vehicle_type: "bike" | "car" | "tricycle"; enabled: boolean }>>(
+          `service_vehicle_areas?select=vehicle_type,enabled&state=eq.${encodeURIComponent(input.state)}&lga=eq.${encodeURIComponent(input.lga)}`,
+        );
+      }),
+    setServiceVehicleArea: adminProcedure
+      .input(z.object({
+        state: z.string().min(1),
+        lga: z.string().min(1),
+        vehicleType: z.enum(["bike", "car", "tricycle"]),
+        enabled: z.boolean(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (!isNigerianStateLga(input.state, input.lga)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a valid Nigerian state and L.G.A." });
+        }
+        const rows = await supabaseAdminRequest<Array<{ vehicle_type: string; enabled: boolean }>>(
+          "service_vehicle_areas?on_conflict=state,lga,vehicle_type",
+          {
+            method: "POST",
+            headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+            body: JSON.stringify({
+              state: input.state,
+              lga: input.lga,
+              vehicle_type: input.vehicleType,
+              enabled: input.enabled,
+              updated_by: String(ctx.user.id),
+              updated_at: new Date().toISOString(),
+            }),
+          },
+        );
+        const db = await getDb();
+        if (db) await db.insert(auditLogs).values({
+          actorUserId: ctx.user.id,
+          action: "service_vehicle_area_updated",
+          entityType: "service_vehicle_area",
+          entityId: `${input.state}/${input.lga}/${input.vehicleType}`,
+          metadata: JSON.stringify({ enabled: input.enabled }),
+        });
+        return rows[0] ?? { vehicle_type: input.vehicleType, enabled: input.enabled };
+      }),
     driverApplications: adminProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];
@@ -955,7 +1027,7 @@ export const appRouter = router({
     approveSupabaseDriver: adminProcedure
       .input(z.object({ driverId: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => {
-        const [driver] = await supabaseAdminRequest<Array<{ id: string; vehicle_type: "bike" | "car" }>>(
+        const [driver] = await supabaseAdminRequest<Array<{ id: string; vehicle_type: "bike" | "car" | "tricycle" }>>(
           `driver_profiles?select=id,vehicle_type&id=eq.${encodeURIComponent(input.driverId)}&is_approved=eq.false`,
         );
         if (!driver) {
@@ -1035,6 +1107,17 @@ export const appRouter = router({
   shared: router({
     rideStatuses: publicProcedure.query(() => rideStatus.options),
     lgas: publicProcedure.query(() => getLgas()),
+    serviceVehicles: publicProcedure
+      .input(z.object({ state: z.string().min(1), lga: z.string().min(1) }))
+      .query(async ({ input }) => {
+        if (!isNigerianStateLga(input.state, input.lga)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Choose a valid Nigerian state and L.G.A." });
+        }
+        const rows = await supabaseAdminRequest<Array<{ vehicle_type: "bike" | "car" | "tricycle" }>>(
+          `service_vehicle_areas?select=vehicle_type&state=eq.${encodeURIComponent(input.state)}&lga=eq.${encodeURIComponent(input.lga)}&enabled=eq.true`,
+        );
+        return rows.map(row => row.vehicle_type);
+      }),
     mapConfig: publicProcedure.query(() => ({ center: { lat: 5.0513, lng: 7.9335 }, zoom: 9, serviceArea: "Akwa Ibom" })),
     detectLga: publicProcedure.input(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })).query(async ({ input }) => {
       const lga = await detectLgaFromCoordinates(input.lat, input.lng);

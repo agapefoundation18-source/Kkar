@@ -66,6 +66,7 @@ revoke all on function public.can_view_ride_avatar(text) from public;
 grant execute on function public.can_view_ride_avatar(text) to authenticated;
 
 drop policy if exists "Users and active pickup drivers can view account avatars" on storage.objects;
+drop policy if exists "Users and active ride participants can view account avatars" on storage.objects;
 create policy "Users and active ride participants can view account avatars"
   on storage.objects
   for select

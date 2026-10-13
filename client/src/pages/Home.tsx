@@ -1,5 +1,6 @@
-import { Download, MapPin, Navigation, ShieldCheck } from "lucide-react";
+import { Download, MapPin, ShieldCheck } from "lucide-react";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const DRIVER_SITE = "https://kkarydriver.aevonindustries.site/";
 
@@ -12,9 +13,7 @@ export default function Home() {
         <div className="mx-auto grid max-w-6xl gap-12 md:grid-cols-2 md:items-center">
           <div>
             <a href="/" className="inline-flex items-center gap-3" aria-label="Kkary Rider home">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f4b942] text-[#153a3a]">
-                <Navigation className="h-5 w-5 fill-current" />
-              </span>
+              <BrandLogo className="h-11 w-11 rounded-2xl" />
               <span className="text-xl font-black">Kkary Rider</span>
             </a>
             <p className="mt-10 text-xs font-black uppercase tracking-[0.18em] text-[#9dd1c3]">Local rides made easy</p>
@@ -42,7 +41,7 @@ export default function Home() {
                 Open Rider App
               </a>
             </div>
-            <a href={DRIVER_SITE} className="mt-7 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-[#f4c24d] underline-offset-4 hover:underline">
+            <a href={DRIVER_SITE} target="_blank" rel="noopener noreferrer" className="mt-7 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-[#f4c24d] underline-offset-4 hover:underline">
               Become a Kkary Driver
             </a>
           </div>
@@ -69,7 +68,7 @@ export default function Home() {
           <h2 className="text-lg font-black">Rider App</h2>
           <p className="mt-2 text-sm text-[#64807a]">Install or open Kkary Rider on this site.</p>
         </a>
-        <a href={DRIVER_SITE} className="rounded-3xl border border-[#dfebe7] bg-white p-6">
+        <a href={DRIVER_SITE} target="_blank" rel="noopener noreferrer" className="rounded-3xl border border-[#dfebe7] bg-white p-6">
           <h2 className="text-lg font-black">Kkary Driver</h2>
           <p className="mt-2 text-sm text-[#64807a]">Drivers have a separate app and installer.</p>
         </a>
