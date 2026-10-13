@@ -163,7 +163,9 @@ The admin actions publish release metadata or request a Vercel deployment. New c
 1. Create a Geoapify account and an API key at [geoapify.com](https://www.geoapify.com/).
 2. Set `VITE_GEOAPIFY_API_KEY` in local development and the Vercel project’s build environment, then redeploy so Vite can include it in the Rider and Driver apps.
 3. The browser key is visible in client requests. Restrict its allowed origins to the Kkar production domains and local development, and set provider quotas/usage alerts.
-4. The apps use Geoapify map tiles, address autocomplete, reverse geocoding, and driving routes with turn-by-turn instructions. The map displays Geoapify/OpenStreetMap attribution.
+4. The apps use Geoapify's OSM Carto tiles, Akwa Ibom-filtered address autocomplete, reverse geocoding, viewport-based local-place searches, and driving routes with turn-by-turn instructions. The map displays Geoapify/OpenStreetMap attribution.
+5. At zoom level 15 and closer, the map requests mapped schools, universities, places of worship, markets, malls, shops, food venues, health services, fuel stations, parks, hotels, and attractions in the visible viewport. Results are cached in the browser for 10 minutes and capped at 200 per view to control load.
+6. Map completeness depends on real Geoapify/OpenStreetMap coverage. Unmapped streets, house numbers, businesses, and landmarks cannot be shown or searched; this is not a guaranteed substitute for Google's proprietary data. Check the Geoapify account's current plan, credit limits, attribution terms, and usage alerts before increasing map traffic.
 
 ---
 

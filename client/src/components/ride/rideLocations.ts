@@ -2,6 +2,7 @@ import type { Coordinate } from "@shared/rideMath";
 import { getNigerianLgas, nigeriaStates } from "@shared/nigeriaLocations";
 
 export type Place = Coordinate & { label: string; state?: string; lga?: string };
+export type MapPlace = Place & { id: string; categories: string[] };
 export type RouteStep = {
   instruction: string;
   distanceMeters: number;
@@ -26,6 +27,19 @@ type GeoapifyGeocodeResult = {
   suburb?: string;
 };
 type GeoapifyGeocodeResponse = { results?: GeoapifyGeocodeResult[] };
+type GeoapifyPlacesResponse = {
+  features?: Array<{
+    geometry?: { type?: string; coordinates?: [number, number] };
+    properties?: {
+      place_id?: string;
+      name?: string;
+      formatted?: string;
+      address_line1?: string;
+      categories?: string[];
+      state?: string;
+    };
+  }>;
+};
 
 type GeoapifyRouteResponse = {
   features?: Array<{
@@ -47,7 +61,37 @@ type GeoapifyRouteResponse = {
   }>;
 };
 
-const nigeriaCenter: Coordinate = { lat: 9.08, lng: 7.49 };
+const akwaIbomCenter: Coordinate = { lat: 5.04, lng: 7.92 };
+const akwaIbomBounds = {
+  south: 4.2,
+  west: 7.2,
+  north: 5.7,
+  east: 8.5,
+};
+const visiblePlaceCache = new Map<string, { expiresAt: number; places: MapPlace[] }>();
+const placeCategories = [
+  "education.school",
+  "education.university",
+  "education.college",
+  "religion.place_of_worship",
+  "commercial.marketplace",
+  "commercial.shopping_mall",
+  "commercial.supermarket",
+  "commercial.shop",
+  "catering.restaurant",
+  "catering.fast_food",
+  "catering.cafe",
+  "healthcare.hospital",
+  "healthcare.clinic",
+  "healthcare.pharmacy",
+  "service.vehicle.fuel",
+  "leisure.park",
+  "leisure.golf_course",
+  "accommodation.hotel",
+  "accommodation.motel",
+  "accommodation.guest_house",
+  "tourism.attraction",
+].join(",");
 
 function normalizeAreaName(value: string) {
   return value
@@ -130,9 +174,9 @@ export async function searchPlaces(
   if (trimmedQuery.length < 3) return [];
 
   const url = geocodeUrl("autocomplete");
-  url.searchParams.set("text", `${trimmedQuery}, Nigeria`);
-  url.searchParams.set("filter", "countrycode:ng");
-  const bias = area?.location ?? nigeriaCenter;
+  url.searchParams.set("text", `${trimmedQuery}, Akwa Ibom, Nigeria`);
+  url.searchParams.set("filter", `rect:${akwaIbomBounds.west},${akwaIbomBounds.south},${akwaIbomBounds.east},${akwaIbomBounds.north}`);
+  const bias = area?.location ?? akwaIbomCenter;
   url.searchParams.set("bias", `proximity:${bias.lng},${bias.lat}`);
   url.searchParams.set("limit", "6");
   const result = await fetchGeoapify<GeoapifyGeocodeResponse>(url, signal);
@@ -153,7 +197,66 @@ export async function searchPlaces(
         state,
         lga: geocodedLga(state, item),
       };
+    })
+    .filter(place => place.state === "Akwa Ibom");
+}
+
+export async function searchVisiblePlaces(
+  bounds: { south: number; west: number; north: number; east: number },
+  signal?: AbortSignal,
+): Promise<MapPlace[]> {
+  const south = Math.max(akwaIbomBounds.south, Math.floor(bounds.south * 100) / 100);
+  const west = Math.max(akwaIbomBounds.west, Math.floor(bounds.west * 100) / 100);
+  const north = Math.min(akwaIbomBounds.north, Math.ceil(bounds.north * 100) / 100);
+  const east = Math.min(akwaIbomBounds.east, Math.ceil(bounds.east * 100) / 100);
+  if (south >= north || west >= east) return [];
+
+  const cacheKey = [south, west, north, east].map(value => value.toFixed(2)).join(",");
+  const cached = visiblePlaceCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.places;
+
+  const url = new URL("https://api.geoapify.com/v2/places");
+  url.searchParams.set("apiKey", requireApiKey());
+  url.searchParams.set("categories", placeCategories);
+  url.searchParams.set("filter", `rect:${west},${south},${east},${north}`);
+  url.searchParams.set("limit", "200");
+  url.searchParams.set("lang", "en");
+  const response = await fetchGeoapify<GeoapifyPlacesResponse>(url, signal);
+  if (!Array.isArray(response.features)) {
+    throw new Error("Geoapify returned an invalid local-place response.");
+  }
+  const places: MapPlace[] = [];
+  for (const [index, feature] of response.features.entries()) {
+    const coordinates = feature.geometry?.coordinates;
+    if (
+      feature.geometry?.type !== "Point"
+      || !Array.isArray(coordinates)
+      || !Number.isFinite(coordinates[0])
+      || !Number.isFinite(coordinates[1])
+    ) continue;
+
+    const [lng, lat] = coordinates;
+    const state = canonicalState(feature.properties?.state);
+    const label = feature.properties?.name?.trim()
+      || feature.properties?.address_line1?.trim()
+      || feature.properties?.formatted?.trim();
+    if (!label || !isInsideServiceArea({ lat, lng }) || (state && state !== "Akwa Ibom")) continue;
+    places.push({
+      id: feature.properties?.place_id ?? `${lat},${lng},${index}`,
+      label: label.slice(0, 160),
+      lat,
+      lng,
+      state,
+      categories: feature.properties?.categories ?? [],
     });
+  }
+
+  if (visiblePlaceCache.size >= 80) {
+    const firstKey = visiblePlaceCache.keys().next().value;
+    if (firstKey) visiblePlaceCache.delete(firstKey);
+  }
+  visiblePlaceCache.set(cacheKey, { expiresAt: Date.now() + 10 * 60_000, places });
+  return places;
 }
 
 export async function reverseGeocode(point: Coordinate, signal?: AbortSignal): Promise<string> {
@@ -248,13 +351,16 @@ export async function getRouteEstimate(
 export function geoapifyTileUrl() {
   const key = getGeoapifyApiKey();
   if (!key) return null;
-  return `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(key)}`;
+  return `https://maps.geoapify.com/v1/tile/osm-carto/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(key)}`;
 }
 
 export function defaultMapCenter(): Coordinate {
-  return nigeriaCenter;
+  return akwaIbomCenter;
 }
 
 export function isInsideServiceArea(point: Coordinate) {
-  return point.lat >= 4 && point.lat <= 14 && point.lng >= 2 && point.lng <= 15;
+  return point.lat >= akwaIbomBounds.south
+    && point.lat <= akwaIbomBounds.north
+    && point.lng >= akwaIbomBounds.west
+    && point.lng <= akwaIbomBounds.east;
 }

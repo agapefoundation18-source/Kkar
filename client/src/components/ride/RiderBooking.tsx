@@ -96,7 +96,7 @@ function LocationSearch({
               onSearch();
             }
           }}
-          placeholder={`Search ${label.toLowerCase()} in Nigeria`}
+          placeholder={`Search ${label.toLowerCase()} in Akwa Ibom`}
           aria-label={label}
           className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-[#1c3d3d] outline-none placeholder:font-normal placeholder:text-[#8ba29d]"
         />
@@ -166,7 +166,7 @@ export function RiderBooking({ defaultState, defaultLga }: { defaultState?: stri
         setUserLocation(point);
         setMapCenter(point);
         if (!isInsideServiceArea(point)) {
-          setLocationNotice("Your current location appears to be outside Nigeria. You can still browse the map.");
+          setLocationNotice("Your current location is outside Akwa Ibom. You can still browse the map, but rides are currently limited to Akwa Ibom.");
           return;
         }
         setLocationNotice("");
@@ -392,7 +392,7 @@ export function RiderBooking({ defaultState, defaultLga }: { defaultState?: stri
       });
       if (target === "pickup") setPickupResults(places);
       else setDestinationResults(places);
-      if (!places.length) setError("No matching places found in Nigeria. Try a nearby landmark or use the map.");
+      if (!places.length) setError("No matching places found in Akwa Ibom. Try a nearby landmark or use the map.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Place search failed. Please try again.");
     } finally {
@@ -417,7 +417,7 @@ export function RiderBooking({ defaultState, defaultLga }: { defaultState?: stri
 
   const selectMapPoint = async (target: "pickup" | "destination", point: Coordinate) => {
     if (!isInsideServiceArea(point)) {
-      setError("Choose a pickup within Nigeria.");
+      setError("Choose a pickup within Akwa Ibom.");
       return;
     }
     if (target === "pickup") manuallySelectedPickup.current = true;
@@ -444,8 +444,8 @@ export function RiderBooking({ defaultState, defaultLga }: { defaultState?: stri
         setUserLocation(point);
         setMapCenter(point);
         if (!isInsideServiceArea(point)) {
-          setLocationNotice("Your current location appears to be outside Nigeria. You can still browse the map.");
-          setError("Kkary rides are currently available in Nigeria. Search for a pickup in Nigeria instead.");
+          setLocationNotice("Your current location is outside Akwa Ibom. You can still browse the map, but rides are currently limited to Akwa Ibom.");
+          setError("Kkary rides are currently available in Akwa Ibom. Search for a pickup there instead.");
           return;
         }
         setLocationNotice("");
@@ -786,7 +786,7 @@ export function RiderBooking({ defaultState, defaultLga }: { defaultState?: stri
                 vehicleType: vehicle.vehicle_type,
               }))}
               center={mapCenter}
-              initialZoom={12}
+              initialZoom={15}
               route={route?.path}
               selectionTarget={selectionTarget}
               onSelectLocation={selectMapPoint}

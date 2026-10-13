@@ -1,9 +1,8 @@
 import L from "leaflet";
-import { useEffect, useMemo } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { useEffect, useMemo, useState } from "react";
+import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import type { Coordinate } from "@shared/rideMath";
-import type { Place } from "./rideLocations";
-import { geoapifyTileUrl } from "./rideLocations";
+import { geoapifyTileUrl, searchVisiblePlaces, type MapPlace, type Place } from "./rideLocations";
 import "leaflet/dist/leaflet.css";
 
 const markerIcon = (color: string) =>
@@ -33,6 +32,98 @@ const userLocationIcon = L.divIcon({
   iconSize: [24, 24],
   iconAnchor: [12, 12],
 });
+function placeEmoji(categories: string[]) {
+  if (categories.some(category => category.startsWith("education."))) return "🎓";
+  if (categories.some(category => category.startsWith("religion."))) return "⛪";
+  if (categories.some(category => category.startsWith("healthcare."))) return "🏥";
+  if (categories.some(category => category.startsWith("catering."))) return "🍽️";
+  if (categories.some(category => category.startsWith("commercial."))) return "🛍️";
+  if (categories.some(category => category.startsWith("accommodation."))) return "🏨";
+  if (categories.some(category => category.startsWith("tourism."))) return "📍";
+  if (categories.some(category => category.startsWith("leisure."))) return "🌳";
+  if (categories.some(category => category.startsWith("service.vehicle."))) return "⛽";
+  return "📍";
+}
+
+function localPlaceIcon(categories: string[]) {
+  const icon = placeEmoji(categories);
+  return L.divIcon({
+    className: "",
+    html: `<span style="display:flex;width:27px;height:27px;align-items:center;justify-content:center;border:2px solid white;border-radius:50%;background:#fff;box-shadow:0 1px 5px #102a2c66;font-size:15px">${icon}</span>`,
+    iconSize: [27, 27],
+    iconAnchor: [13, 13],
+  });
+}
+
+function LocalPlacesLayer({ onStatusChange }: { onStatusChange: (status: string) => void }) {
+  const map = useMap();
+  const [places, setPlaces] = useState<MapPlace[]>([]);
+  const [zoom, setZoom] = useState(map.getZoom());
+
+  useEffect(() => {
+    let timer: number | undefined;
+    let controller: AbortController | undefined;
+    const loadPlaces = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      controller?.abort();
+      const currentZoom = map.getZoom();
+      setZoom(currentZoom);
+      if (currentZoom < 15) {
+        setPlaces([]);
+        onStatusChange("Zoom in to see local places");
+        return;
+      }
+      onStatusChange("Loading mapped local places…");
+      timer = window.setTimeout(() => {
+        const bounds = map.getBounds();
+        const requestController = new AbortController();
+        controller = requestController;
+        void searchVisiblePlaces({
+          south: bounds.getSouth(),
+          west: bounds.getWest(),
+          north: bounds.getNorth(),
+          east: bounds.getEast(),
+        }, requestController.signal)
+          .then(results => {
+            if (requestController.signal.aborted) return;
+            setPlaces(results);
+            onStatusChange(results.length
+              ? `${results.length} mapped local places`
+              : "No mapped places in this view yet");
+          })
+          .catch(error => {
+            if (requestController.signal.aborted) return;
+            setPlaces([]);
+            const reason = error instanceof Error ? error.message : "Unknown map service error";
+            onStatusChange(`Local places unavailable: ${reason}`);
+            if (import.meta.env.DEV) console.warn("Could not load mapped places for this view.", error);
+          });
+      }, 300);
+    };
+
+    map.on("moveend zoomend", loadPlaces);
+    loadPlaces();
+    return () => {
+      map.off("moveend zoomend", loadPlaces);
+      if (timer !== undefined) window.clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [map, onStatusChange]);
+
+  return (
+    <>
+      {places.map(place => (
+        <Marker key={place.id} position={[place.lat, place.lng]} icon={localPlaceIcon(place.categories)}>
+          <Tooltip permanent={zoom >= 16} direction="top" offset={[0, -11]}>{place.label}</Tooltip>
+          <Popup>
+            <strong>{place.label}</strong>
+            {place.categories.length > 0 && <div>{place.categories.join(" · ")}</div>}
+          </Popup>
+        </Marker>
+      ))}
+    </>
+  );
+}
 
 function MapInteraction({
   target,
@@ -85,6 +176,7 @@ export function RideMap({
   initialZoom = 13,
   selectionTarget = null,
   onSelectLocation,
+  showLocalPlaces = true,
   className = "h-[320px]",
 }: {
   pickup?: Place | null;
@@ -97,9 +189,12 @@ export function RideMap({
   initialZoom?: number;
   selectionTarget?: "pickup" | "destination" | null;
   onSelectLocation?: (target: "pickup" | "destination", point: Coordinate) => void;
+  showLocalPlaces?: boolean;
   className?: string;
 }) {
   const tileUrl = geoapifyTileUrl();
+  const [localPlacesStatus, setLocalPlacesStatus] = useState("Zoom in to see local places");
+  const updateLocalPlacesStatus = useMemo(() => (status: string) => setLocalPlacesStatus(status), []);
   const fitPoints = useMemo(() => [
     ...(route?.length ? route : []),
     ...(pickup ? [pickup] : []),
@@ -118,6 +213,7 @@ export function RideMap({
             url={tileUrl}
             maxZoom={20}
           />
+          {showLocalPlaces && <LocalPlacesLayer onStatusChange={updateLocalPlacesStatus} />}
           <MapInteraction
             target={selectionTarget}
             onSelect={onSelectLocation}
@@ -169,6 +265,11 @@ export function RideMap({
       {selectionTarget && (
         <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-full bg-white/95 px-3 py-2 text-[11px] font-bold text-[#21494a] shadow">
           Tap map to set {selectionTarget}
+        </div>
+      )}
+      {tileUrl && showLocalPlaces && (
+        <div role="status" title={localPlacesStatus} className="pointer-events-none absolute right-3 top-3 z-[500] max-w-[70vw] truncate rounded-full bg-white/95 px-3 py-2 text-[10px] font-semibold text-[#446b64] shadow">
+          {localPlacesStatus}
         </div>
       )}
     </div>

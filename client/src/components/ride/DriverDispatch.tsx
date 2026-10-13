@@ -709,6 +709,7 @@ export function DriverDispatch({ view = "home" }: { view?: "home" | "earnings" }
                 pickup={pointPlace(ride.pickup_lat, ride.pickup_lng, ride.pickup_address)}
                 destination={pointPlace(ride.dropoff_lat, ride.dropoff_lng, ride.dropoff_address)}
                 center={{ lat: Number(ride.pickup_lat), lng: Number(ride.pickup_lng) }}
+                showLocalPlaces={false}
                 className="mt-3 h-[180px]"
               />
               <div className="mt-3 space-y-2 text-xs text-gray-300">
