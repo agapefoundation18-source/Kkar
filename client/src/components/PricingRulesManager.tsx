@@ -16,7 +16,9 @@ export function PricingRulesManager() {
     onSuccess: async () => {
       toast.success("Pricing rule updated");
       await utils.operations.allPricingRules.invalidate();
+      setEditingId(null);
     },
+    onError: error => toast.error(error.message),
   });
   const addRule = trpc.operations.updatePricing.useMutation({
     onSuccess: async () => {
@@ -24,6 +26,7 @@ export function PricingRulesManager() {
       await utils.operations.allPricingRules.invalidate();
       setShowAddForm(false);
     },
+    onError: error => toast.error(error.message),
   });
 
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -68,7 +71,6 @@ export function PricingRulesManager() {
       commissionBps: Math.round(Number(values.commission) * 100),
       active: values.active,
     });
-    setEditingId(null);
   };
 
   const handleAddRule = () => {
@@ -111,6 +113,18 @@ export function PricingRulesManager() {
           <p className="mt-2 text-sm text-[#7b9490]">
             Select an L.G.A. and configure vehicle types with different base fares, per-km rates, and commissions.
           </p>
+          {allRules.error && (
+            <div role="alert" className="mt-3 rounded-xl bg-[#fff2ef] p-3 text-sm text-[#a85d52]">
+              Could not load pricing rules: {allRules.error.message}
+              <Button type="button" variant="outline" onClick={() => void allRules.refetch()} className="ml-2 rounded-lg">Retry</Button>
+            </div>
+          )}
+          {lgas.error && (
+            <div role="alert" className="mt-3 rounded-xl bg-[#fff2ef] p-3 text-sm text-[#a85d52]">
+              Could not load L.G.A. options: {lgas.error.message}
+              <Button type="button" variant="outline" onClick={() => void lgas.refetch()} className="ml-2 rounded-lg">Retry</Button>
+            </div>
+          )}
         </div>
         <Button
           onClick={() => setShowAddForm(!showAddForm)}

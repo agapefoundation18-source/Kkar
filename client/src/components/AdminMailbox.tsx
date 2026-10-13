@@ -155,7 +155,7 @@ export default function AdminMailbox() {
 
             <div className="overflow-hidden rounded-[24px] border border-[#e0ece8] bg-white">
               {waitlist.isLoading ? <p className="p-8 text-sm text-[#809792]">Loading waitlist…</p>
-                : waitlist.error ? <p className="m-4 rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">{waitlist.error.message}</p>
+                : waitlist.error ? <div role="alert" className="m-4 rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">{waitlist.error.message}<Button type="button" variant="outline" onClick={() => void waitlist.refetch()} className="ml-2 rounded-lg">Retry</Button></div>
                 : recipients.length ? (
                   <div className="max-h-[360px] overflow-auto">
                     <table className="w-full text-left text-sm">
@@ -189,7 +189,7 @@ export default function AdminMailbox() {
                 <Badge className="bg-[#fff3d7] text-[#a8781d] hover:bg-[#fff3d7]">{selected.length} selected</Badge>
               </div>
               <div className="mt-4 grid gap-3">
-                {drafts.error && <p role="alert" className="rounded-xl bg-[#fff2ef] p-3 text-sm text-[#a85d52]">{drafts.error.message}</p>}
+                {drafts.error && <div role="alert" className="rounded-xl bg-[#fff2ef] p-3 text-sm text-[#a85d52]">{drafts.error.message}<Button type="button" variant="outline" onClick={() => void drafts.refetch()} className="ml-2 rounded-lg">Retry</Button></div>}
                 {drafts.data?.length ? (
                   <label className="block text-xs font-bold text-[#67837d]">
                     Load a saved draft

@@ -16,7 +16,7 @@ import { calculateDriverSplit } from "./fare";
 import { allowedTransitions } from "./rideState";
 import { detectLgaFromCoordinates, getLgas, isValidLga } from "./_core/lga";
 import { compareSemanticVersions, parseSemanticVersion } from "@shared/appRelease";
-import { hasVerifiedDriverDocuments } from "@shared/driverDocuments";
+import { DRIVER_DOCUMENT_LABELS, hasVerifiedDriverDocuments, requiredDriverDocuments } from "@shared/driverDocuments";
 import { isNigerianStateLga } from "@shared/nigeriaLocations";
 
 const vehicleType = z.enum(["bike", "car"]);
@@ -59,12 +59,7 @@ async function getLaunchMode(db: NonNullable<Awaited<ReturnType<typeof getDb>>>)
     launchAt: z.string().datetime().nullable(),
   }).safeParse(value);
   if (!result.success) throw new Error("The launch page setting is invalid.");
-  return {
-    ...result.data,
-    enabled: result.data.enabled &&
-      result.data.launchAt !== null &&
-      Date.parse(result.data.launchAt) > Date.now(),
-  };
+  return result.data;
 }
 
 type SupabaseDriverApplication = {
@@ -77,6 +72,12 @@ type SupabaseDriverApplication = {
   plate_number: string | null;
   created_at: string;
   profiles: { full_name: string; email: string | null } | null;
+  requiredDocuments?: Array<{
+    documentType: string;
+    label: string;
+    verificationStatus: string;
+  }>;
+  canApprove?: boolean;
 };
 
 type SupabaseDriverDocument = {
@@ -969,9 +970,38 @@ export const appRouter = router({
     }),
     supabaseDriverApplications: adminProcedure.query(async () => {
       const rows = await supabaseAdminRequest<SupabaseDriverApplication[]>(
-        "driver_profiles?select=id,profile_id,vehicle_type,vehicle_make,vehicle_model,vehicle_color,plate_number,created_at,profiles(full_name,email)&is_approved=eq.false&order=created_at.asc",
+        "driver_profiles?select=id,profile_id,vehicle_type,vehicle_make,vehicle_model,vehicle_color,plate_number,created_at,profiles(full_name,email)&is_approved=eq.false&order=created_at.asc&limit=100",
       );
-      return rows;
+      if (!rows.length) return [];
+
+      const driverIds = rows.map(row => row.id);
+      const documents = await supabaseAdminRequest<Array<{
+        driver_id: string;
+        document_type: string;
+        verification_status: string;
+      }>>(
+        `driver_documents?select=driver_id,document_type,verification_status&driver_id=in.(${driverIds.join(",")})&limit=1000`,
+      );
+
+      return rows.map(application => {
+        const requiredDocuments = requiredDriverDocuments(application.vehicle_type).map(documentType => {
+          const matching = documents.filter(document =>
+            document.driver_id === application.id && document.document_type === documentType,
+          );
+          return {
+            documentType,
+            label: DRIVER_DOCUMENT_LABELS[documentType],
+            verificationStatus: matching.some(document => document.verification_status === "approved")
+              ? "approved"
+              : matching[0]?.verification_status ?? "missing",
+          };
+        });
+        return {
+          ...application,
+          requiredDocuments,
+          canApprove: requiredDocuments.every(document => document.verificationStatus === "approved"),
+        };
+      });
     }),
     supabaseDriverDocuments: adminProcedure.query(async () => {
       const rows = await supabaseAdminRequest<SupabaseDriverDocument[]>(
@@ -1047,6 +1077,10 @@ export const appRouter = router({
             message: "Approve the driver licence, NIN, and required vehicle documents before approving this driver.",
           });
         }
+        const db = await getDb();
+        if (!db) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The admin audit database is unavailable." });
+        }
         const rows = await supabaseAdminRequest<Array<{ id: string }>>(
           `driver_profiles?id=eq.${encodeURIComponent(input.driverId)}&is_approved=eq.false`,
           { method: "PATCH", body: JSON.stringify({ is_approved: true }) },
@@ -1057,8 +1091,6 @@ export const appRouter = router({
             message: "This driver application was already reviewed or no longer exists.",
           });
         }
-        const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "The admin audit database is unavailable." });
         await db.insert(auditLogs).values({
           actorUserId: ctx.user.id,
           action: "supabase_driver_approved",

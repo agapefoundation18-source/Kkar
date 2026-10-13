@@ -64,7 +64,7 @@ export function DriverExperience() {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true;
   }, []);
-  const requestedAuthMode = isDriverHost ? "app" : new URLSearchParams(window.location.search).get("mode");
+  const requestedAuthMode = new URLSearchParams(window.location.search).get("mode");
   const isWebAuthFlow = requestedAuthMode === "signin" || requestedAuthMode === "signup" || requestedAuthMode === "app";
 
   const [session, setSession] = useState<Session | null>(null);

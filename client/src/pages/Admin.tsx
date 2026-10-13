@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { MapView } from "@/components/Map";
 import AdminMailbox from "@/components/AdminMailbox";
-import { BulkDocumentReview, CommissionHistory, SandboxPaymentTest } from "@/components/AdminEnhancements";
+import { BulkDocumentReview, CommissionHistory } from "@/components/AdminEnhancements";
 import { PricingRulesManager } from "@/components/PricingRulesManager";
 import { AdminVehicleAreas } from "@/components/AdminVehicleAreas";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { ArrowRight, Bike, CalendarClock, Check, ChevronRight, CircleAlert, CreditCard, Download, FileCheck2, KeyRound, LayoutDashboard, Mail as MailboxIcon, Mail as MailIcon, MapPin, Navigation, Plus, Rocket, ShieldCheck, Users, WalletCards, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -213,7 +213,7 @@ function LaunchPageSettings({ onOpenMailbox }: { onOpenMailbox: () => void }) {
     <div>
       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Admin / Launch page</div>
       <h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Prepare the public launch.</h1>
-      <p className="mt-2 text-sm text-[#7b9490]">Control the coming soon page shown to visitors on the Rider and Driver app URLs.</p>
+      <p className="mt-2 text-sm text-[#7b9490]">Control the coming soon page shown to visitors on the Rider and Driver websites. Installed apps remain available, and the website returns to its landing page when the countdown ends.</p>
     </div>
     <Card className="rounded-[26px] border-[#e0ece8]">
       <CardHeader><CardTitle className="text-base text-[#193d3c]">Coming soon page</CardTitle></CardHeader>
@@ -226,8 +226,8 @@ function LaunchPageSettings({ onOpenMailbox }: { onOpenMailbox: () => void }) {
         )}
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-[#f5faf7] p-4">
           <div>
-            <div className="text-sm font-extrabold text-[#355754]">{enabled ? "Coming soon page is enabled" : "Rider and Driver apps are public"}</div>
-            <p className="mt-1 text-xs text-[#819a95]">When enabled, visitors see the launch countdown and waitlist instead of the apps.</p>
+            <div className="text-sm font-extrabold text-[#355754]">{enabled ? "Coming soon page is scheduled" : "Rider and Driver websites are public"}</div>
+            <p className="mt-1 text-xs text-[#819a95]">Enable it to show the countdown until the selected date. It automatically returns to the website landing pages afterward; you can also disable it at any time.</p>
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-[#456660]">
             <input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} className="h-4 w-4 accent-[#3f967f]" />
@@ -265,15 +265,19 @@ function LaunchPageSettings({ onOpenMailbox }: { onOpenMailbox: () => void }) {
 }
 
 function LiveMap({ drivers }: { drivers: Array<{ id: string; defaultLga: string; currentLat: number; currentLng: number }> }) {
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
   useEffect(() => {
-    if (!mapRef.current || !window.google?.maps) return;
-    markersRef.current.forEach(marker => { marker.map = null; });
-    markersRef.current = drivers.filter(driver => driver.currentLat !== null && driver.currentLng !== null).map(driver => new google.maps.marker.AdvancedMarkerElement({ map: mapRef.current!, position: { lat: Number(driver.currentLat), lng: Number(driver.currentLng) }, title: `Driver #${driver.id} · ${driver.defaultLga}` }));
-    return () => { markersRef.current.forEach(marker => { marker.map = null; }); };
-  }, [drivers]);
-  return <Card className="overflow-hidden rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Network map</CardTitle><p className="mt-1 text-xs text-[#89a19d]">Recent online driver locations across Nigeria · refreshes every 5 seconds</p></CardHeader><CardContent className="p-0"><MapView className="h-[360px]" initialCenter={{ lat: 9.08, lng: 7.49 }} initialZoom={6} onMapReady={map => { mapRef.current = map; }} /></CardContent></Card>;
+    if (!map || !window.google?.maps) return;
+    const markers = drivers
+      .filter(driver => Number.isFinite(driver.currentLat) && Number.isFinite(driver.currentLng))
+      .map(driver => new google.maps.marker.AdvancedMarkerElement({
+        map,
+        position: { lat: Number(driver.currentLat), lng: Number(driver.currentLng) },
+        title: `Driver #${driver.id} · ${driver.defaultLga}`,
+      }));
+    return () => { markers.forEach(marker => { marker.map = null; }); };
+  }, [drivers, map]);
+  return <Card className="overflow-hidden rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Network map</CardTitle><p className="mt-1 text-xs text-[#89a19d]">Recent online driver locations in Akwa Ibom · refreshes every 5 seconds</p></CardHeader><CardContent className="p-0"><MapView className="h-[360px]" initialCenter={{ lat: 5.04, lng: 7.92 }} initialZoom={10} onMapReady={setMap} /></CardContent></Card>;
 }
 
 function Overview() {
@@ -302,28 +306,37 @@ function SupabaseDriverReview() {
   const utils = trpc.useUtils();
   const applications = trpc.operations.supabaseDriverApplications.useQuery(undefined, { refetchInterval: 5000 });
   const documents = trpc.operations.supabaseDriverDocuments.useQuery(undefined, { refetchInterval: 5000 });
+  const [approvalError, setApprovalError] = useState<{ driverId: string; message: string } | null>(null);
   const approve = trpc.operations.approveSupabaseDriver.useMutation({
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success("Kkary app driver approved");
+      setApprovalError(null);
+    },
+    onError: (error, variables) => {
+      setApprovalError({ driverId: variables.driverId, message: error.message });
+      toast.error(error.message);
+    },
+    onSettled: async () => {
       await Promise.all([
         utils.operations.supabaseDriverApplications.invalidate(),
         utils.operations.supabaseDriverDocuments.invalidate(),
       ]);
     },
-    onError: error => toast.error(error.message),
   });
   const reviewUrl = trpc.operations.supabaseDriverDocumentReviewUrl.useMutation({
     onError: error => toast.error(error.message),
   });
   const reviewDocument = trpc.operations.reviewSupabaseDriverDocument.useMutation({
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success("Driver document decision saved");
+    },
+    onError: error => toast.error(error.message),
+    onSettled: async () => {
       await Promise.all([
         utils.operations.supabaseDriverDocuments.invalidate(),
         utils.operations.supabaseDriverApplications.invalidate(),
       ]);
     },
-    onError: error => toast.error(error.message),
   });
   const openDocument = async (documentId: string) => {
     const reviewWindow = window.open("about:blank", "_blank");
@@ -354,15 +367,15 @@ function SupabaseDriverReview() {
       </CardHeader>
       <CardContent className="space-y-3">
         {applications.isLoading ? <div className="p-5 text-sm text-[#87a09a]">Loading applications…</div>
-          : applications.error ? <div className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">{applications.error.message}</div>
-            : applications.data?.length ? applications.data.map(application => <div key={application.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e2eee9] p-4"><div><div className="text-sm font-extrabold text-[#355754]">{application.profiles?.full_name || "Driver applicant"}</div><div className="mt-1 text-xs text-[#819a95]">{application.vehicle_color} {application.vehicle_make} {application.vehicle_model} · {application.vehicle_type === "bike" ? "Motorcycle" : application.vehicle_type === "car" ? "Car" : "Tricycle"} · {application.plate_number}</div><div className="mt-1 text-[10px] text-[#8ca39e]">{application.profiles?.email || "No email on profile"}</div></div><Button onClick={() => approve.mutate({ driverId: application.id })} disabled={approve.isPending} size="sm" className="rounded-lg bg-[#3f967f] text-white hover:bg-[#347f6c]"><Check className="mr-1.5 h-3.5 w-3.5" /> Approve driver</Button></div>)
+          : applications.error ? <div role="alert" className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">{applications.error.message}<Button type="button" variant="outline" onClick={() => void applications.refetch()} className="ml-2 rounded-lg">Retry</Button></div>
+            : applications.data?.length ? applications.data.map(application => <div key={application.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e2eee9] p-4"><div className="min-w-0 flex-1"><div className="text-sm font-extrabold text-[#355754]">{application.profiles?.full_name || "Driver applicant"}</div><div className="mt-1 text-xs text-[#819a95]">{application.vehicle_color} {application.vehicle_make} {application.vehicle_model} · {application.vehicle_type === "bike" ? "Motorcycle" : application.vehicle_type === "car" ? "Car" : "Tricycle"} · {application.plate_number}</div><div className="mt-1 text-[10px] text-[#8ca39e]">{application.profiles?.email || "No email on profile"}</div><div className={`mt-2 text-xs font-semibold ${application.canApprove ? "text-[#347a68]" : "text-[#9a6e22]"}`}>{application.canApprove ? "All required identity and vehicle documents are approved." : `Waiting for document review: ${(application.requiredDocuments ?? []).filter(document => document.verificationStatus !== "approved").map(document => `${document.label} (${document.verificationStatus})`).join(", ") || "required documents not verified"}`}</div>{approvalError?.driverId === application.id && <p role="alert" className="mt-2 text-xs font-semibold text-red-700">{approvalError.message}</p>}</div><Button onClick={() => { setApprovalError(null); approve.mutate({ driverId: application.id }); }} disabled={approve.isPending || !application.canApprove} title={!application.canApprove ? "Approve the required documents before approving this driver." : undefined} size="sm" className="rounded-lg bg-[#3f967f] text-white hover:bg-[#347f6c]"><Check className="mr-1.5 h-3.5 w-3.5" /> Approve driver</Button></div>)
               : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-8 text-center text-sm text-[#87a09a]">No Kkary app applications waiting for review.</div>}
       </CardContent>
     </Card>
     <Card className="rounded-[26px] border-[#e0ece8]">
       <CardHeader className="flex-row items-center justify-between space-y-0"><div><CardTitle className="text-base text-[#193d3c]">Private driver documents</CardTitle><p className="mt-1 text-xs text-[#89a19d]">Review links expire after five minutes; files are never publicly served.</p></div><Badge className="bg-[#fff3d7] text-[#a8781d] hover:bg-[#fff3d7]">{documents.data?.length ?? 0} pending</Badge></CardHeader>
       <CardContent className="space-y-3">
-        {documents.error ? <div className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">{documents.error.message}</div>
+        {documents.error ? <div role="alert" className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">{documents.error.message}<Button type="button" variant="outline" onClick={() => void documents.refetch()} className="ml-2 rounded-lg">Retry</Button></div>
           : documents.data?.length ? documents.data.map(document => <div key={document.id} className="flex flex-wrap items-center gap-3 rounded-2xl bg-[#f6faf8] p-3">
             <div className="min-w-0 flex-1"><div className="text-sm font-bold text-[#42635e]">{docName[document.documentType] ?? document.documentType}</div><div className="text-[10px] text-[#8ca39e]">Driver #{document.driverId} · {document.fileName}</div></div>
             <Button size="sm" variant="outline" disabled={reviewUrl.isPending} onClick={() => void openDocument(document.id)} className="rounded-lg">Review file</Button>
@@ -399,9 +412,16 @@ function DriverReview() {
 function Finance() {
   const pricing = trpc.operations.pricing.useQuery();
   const utils = trpc.useUtils();
-  const updateShare = trpc.operations.updateRevenueShare.useMutation({ onSuccess: async () => { toast.success("Revenue share updated"); await utils.operations.pricing.invalidate(); } });
+  const updateShare = trpc.operations.updateRevenueShare.useMutation({
+    onSuccess: async () => {
+      toast.success("Revenue share updated");
+      await Promise.all([utils.operations.pricing.invalidate(), utils.operations.commissionHistory.invalidate()]);
+    },
+    onError: error => toast.error(error.message),
+  });
   const [commission, setCommission] = useState("20");
-  return <div className="space-y-8"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Finance</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Keep the maths honest.</h1><p className="mt-2 text-sm text-[#7b9490]">Manage global revenue share and per-LGA pricing rules for all vehicle types.</p></div><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Driver income percentage (global)</CardTitle></CardHeader><CardContent><div className="rounded-2xl bg-[#edf7f2] p-5"><div className="text-[10px] font-black uppercase tracking-[0.13em] text-[#69948b]">Current platform share</div><div className="mt-2 text-4xl font-black tracking-[-0.06em] text-[#2e7568]">{pricing.data?.[0] ? `${(pricing.data[0].commissionBps / 100).toFixed(0)}%` : "20%"}</div><p className="mt-2 text-xs leading-relaxed text-[#78948d]">If platform share is 20%, the driver income share is 80%. This applies as a base across all active pricing rules.</p></div><label className="mt-5 block"><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.13em] text-[#809a94]">Set platform share (%)</span><Input type="number" min="0" max="100" value={commission} onChange={event => setCommission(event.target.value)} className="h-12 rounded-xl" /></label><Button onClick={() => updateShare.mutate({ commissionBps: Math.round(Number(commission) * 100) })} disabled={updateShare.isPending} className="mt-4 h-12 w-full rounded-xl bg-[#113a3b] text-white">{updateShare.isPending ? "Saving…" : "Save revenue share"}</Button></CardContent></Card><AdminVehicleAreas /><PricingRulesManager /></div>;
+  const commissionValue = Number(commission);
+  return <div className="space-y-8"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Finance</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Keep the maths honest.</h1><p className="mt-2 text-sm text-[#7b9490]">Manage global revenue share and per-LGA pricing rules for all vehicle types.</p></div>{pricing.error && <div role="alert" className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">Could not load current revenue share: {pricing.error.message}<Button type="button" variant="outline" onClick={() => void pricing.refetch()} className="ml-2 rounded-lg">Retry</Button></div>}<Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Driver income percentage (global)</CardTitle></CardHeader><CardContent><div className="rounded-2xl bg-[#edf7f2] p-5"><div className="text-[10px] font-black uppercase tracking-[0.13em] text-[#69948b]">Current platform share</div><div className="mt-2 text-4xl font-black tracking-[-0.06em] text-[#2e7568]">{pricing.data?.[0] ? `${(pricing.data[0].commissionBps / 100).toFixed(0)}%` : "20%"}</div><p className="mt-2 text-xs leading-relaxed text-[#78948d]">If platform share is 20%, the driver income share is 80%. This applies as a base across all active pricing rules.</p></div><label className="mt-5 block"><span className="mb-2 block text-[10px] font-black uppercase tracking-[0.13em] text-[#809a94]">Set platform share (%)</span><Input type="number" min="0" max="100" value={commission} onChange={event => setCommission(event.target.value)} className="h-12 rounded-xl" /></label><Button onClick={() => updateShare.mutate({ commissionBps: Math.round(commissionValue * 100) })} disabled={updateShare.isPending || !commission.trim() || !Number.isFinite(commissionValue) || commissionValue < 0 || commissionValue > 100} className="mt-4 h-12 w-full rounded-xl bg-[#113a3b] text-white">{updateShare.isPending ? "Saving…" : "Save revenue share"}</Button></CardContent></Card><AdminVehicleAreas /><PricingRulesManager /><CommissionHistory /></div>;
 }
 
 function Admins() {
@@ -414,7 +434,7 @@ function Admins() {
     onError: error => toast.error(error.message),
   });
   const [username, setUsername] = useState(""); const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [role, setRole] = useState<"admin" | "super_admin">("admin"); const [password, setPassword] = useState("");
-  return <div className="space-y-6"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Administrators</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Control access carefully.</h1><p className="mt-2 text-sm text-[#7b9490]">Only a super-admin can create another admin or super-admin. Every new credential must change its temporary password.</p></div><div className="grid gap-6 xl:grid-cols-[1fr_1fr]"><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Create administrator</CardTitle></CardHeader><CardContent><form onSubmit={event => { event.preventDefault(); create.mutate({ username, name, email: email || undefined, role, password }); }} className="space-y-3"><Input value={username} onChange={event => setUsername(event.target.value)} placeholder="Username" className="h-11 rounded-xl" /><Input value={name} onChange={event => setName(event.target.value)} placeholder="Full name" className="h-11 rounded-xl" /><Input value={email} onChange={event => setEmail(event.target.value)} placeholder="Email (optional)" className="h-11 rounded-xl" /><select value={role} onChange={event => setRole(event.target.value as "admin" | "super_admin")} className="h-11 w-full rounded-xl border border-[#dcebe5] bg-white px-3 text-sm"><option value="admin">Admin</option><option value="super_admin">Super-admin</option></select><Input value={password} onChange={event => setPassword(event.target.value)} placeholder="Temporary password (10+ characters)" type="password" className="h-11 rounded-xl" /><Button disabled={create.isPending || password.length < 10} className="h-11 w-full rounded-xl bg-[#113a3b] text-white">{create.isPending ? "Creating…" : "Create credential"}</Button></form></CardContent></Card><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Current administrators</CardTitle></CardHeader><CardContent className="space-y-2">{admins.data?.length ? admins.data.map(admin => <div key={admin.id} className="flex items-center gap-3 rounded-xl bg-[#f6faf8] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e5f2ec] text-[#3c8b78]"><Users className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="text-sm font-bold text-[#42635e]">{admin.name || admin.username}</div><div className="text-[10px] text-[#8aa29d]">@{admin.username} · {admin.role}</div></div>{admin.mustChangePassword && <Badge className="bg-[#fff3d7] text-[#a8781d] hover:bg-[#fff3d7]">Password reset</Badge>}</div>) : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-10 text-center text-sm text-[#87a09a]">No credentials found yet.</div>}</CardContent></Card></div></div>;
+  return <div className="space-y-6"><div><div className="text-[10px] font-black uppercase tracking-[0.16em] text-[#63938a]">Operations / Administrators</div><h1 className="mt-2 text-3xl font-black tracking-[-0.06em] text-[#153b3b]">Control access carefully.</h1><p className="mt-2 text-sm text-[#7b9490]">Only a super-admin can create another admin or super-admin. Every new credential must change its temporary password.</p></div><div className="grid gap-6 xl:grid-cols-[1fr_1fr]"><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Create administrator</CardTitle></CardHeader><CardContent><form onSubmit={event => { event.preventDefault(); create.mutate({ username, name, email: email || undefined, role, password }); }} className="space-y-3"><Input value={username} onChange={event => setUsername(event.target.value)} placeholder="Username" required minLength={3} maxLength={64} className="h-11 rounded-xl" /><Input value={name} onChange={event => setName(event.target.value)} placeholder="Full name" required minLength={2} maxLength={120} className="h-11 rounded-xl" /><Input value={email} onChange={event => setEmail(event.target.value)} placeholder="Email (optional)" type="email" className="h-11 rounded-xl" /><select value={role} onChange={event => setRole(event.target.value as "admin" | "super_admin")} className="h-11 w-full rounded-xl border border-[#dcebe5] bg-white px-3 text-sm"><option value="admin">Admin</option><option value="super_admin">Super-admin</option></select><Input value={password} onChange={event => setPassword(event.target.value)} placeholder="Temporary password (10+ characters)" type="password" required minLength={10} maxLength={128} className="h-11 rounded-xl" /><Button disabled={create.isPending || password.length < 10} className="h-11 w-full rounded-xl bg-[#113a3b] text-white">{create.isPending ? "Creating…" : "Create credential"}</Button></form></CardContent></Card><Card className="rounded-[26px] border-[#e0ece8]"><CardHeader><CardTitle className="text-base text-[#193d3c]">Current administrators</CardTitle></CardHeader><CardContent className="space-y-2">{admins.isLoading ? <div className="p-5 text-sm text-[#87a09a]">Loading administrator accounts…</div> : admins.error ? <div role="alert" className="rounded-xl bg-[#fff2ef] p-4 text-sm text-[#a85d52]">{admins.error.message}<Button type="button" variant="outline" onClick={() => void admins.refetch()} className="ml-2 rounded-lg">Retry</Button></div> : admins.data?.length ? admins.data.map(admin => <div key={admin.id} className="flex items-center gap-3 rounded-xl bg-[#f6faf8] p-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e5f2ec] text-[#3c8b78]"><Users className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="text-sm font-bold text-[#42635e]">{admin.name || admin.username}</div><div className="text-[10px] text-[#8aa29d]">@{admin.username} · {admin.role}</div></div>{admin.mustChangePassword && <Badge className="bg-[#fff3d7] text-[#a8781d] hover:bg-[#fff3d7]">Password reset</Badge>}</div>) : <div className="rounded-2xl border border-dashed border-[#cfe2db] p-10 text-center text-sm text-[#87a09a]">No credentials found yet.</div>}</CardContent></Card></div></div>;
 }
 
 function Mail() {
@@ -515,7 +535,7 @@ export default function Admin() {
           <div className="flex items-center gap-3">
             {canInstall && <Button size="sm" onClick={installApp} className="rounded-lg bg-[#4ea88e] text-white hover:bg-[#3d9178]"><Download className="mr-2 h-4 w-4" /> Install Console</Button>}
             <div className="hidden items-center gap-2 rounded-full bg-[#eef7f3] px-3 py-2 text-[10px] font-bold text-[#4a7c72] sm:flex"><span className="h-2 w-2 rounded-full bg-[#4ea88e]" /> {user.name || user.username}</div>
-            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-xs text-[#78918e]">Sign out</Button>
+            <Button variant="ghost" size="sm" onClick={() => { void logout().catch(error => toast.error(error instanceof Error ? error.message : "Could not complete sign out.")); }} className="text-xs text-[#78918e]">Sign out</Button>
           </div>
         </header>
         {user.mustChangePassword && <div className="border-b border-[#f0d68c] bg-[#fff8df] px-5 py-3 lg:px-8">

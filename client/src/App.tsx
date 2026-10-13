@@ -10,6 +10,7 @@ import Admin from "./pages/Admin";
 import Drivers from "./pages/Drivers";
 import LaunchComingSoon from "./components/LaunchComingSoon";
 import { trpc } from "./lib/trpc";
+import { shouldShowLaunchPage } from "./lib/launchPage";
 import { Button } from "./components/ui/button";
 import { useCallback, useEffect, useState } from "react";
 
@@ -21,10 +22,17 @@ function Router() {
     refetchInterval: 30_000,
   });
   const [launchEnded, setLaunchEnded] = useState(false);
-  const endLaunch = useCallback(() => setLaunchEnded(true), []);
+  const endLaunch = useCallback(() => {
+    setLaunchEnded(true);
+    if (window.location.search) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash}`);
+    }
+  }, []);
   const isLegacyDriverPath = !isDriverHost && window.location.pathname === "/drivers";
-  const isPublicAppPath = window.location.pathname === "/" &&
-    new URLSearchParams(window.location.search).get("mode") !== "app";
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches ||
+    Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+  const isPublicAppPath = !isStandalone &&
+    (window.location.pathname === "/" || window.location.pathname === "/drivers");
   useEffect(() => setLaunchEnded(false), [launchStatus.data?.launchAt]);
   useEffect(() => {
     if (isLegacyDriverPath) {
@@ -49,13 +57,12 @@ function Router() {
     );
   }
   const launchAt = launchStatus.data?.launchAt;
-  const launchCountdownActive = Boolean(
-    isPublicAppPath &&
-    launchStatus.data?.enabled &&
-    launchAt &&
-    Date.parse(launchAt) > Date.now() &&
-    !launchEnded,
-  );
+  const launchCountdownActive = !launchEnded && shouldShowLaunchPage({
+    pathname: window.location.pathname,
+    standalone: isStandalone,
+    enabled: launchStatus.data?.enabled ?? false,
+    launchAt,
+  });
   if (launchCountdownActive) {
     return <LaunchComingSoon launchAt={launchAt!} onCountdownEnd={endLaunch} />;
   }
