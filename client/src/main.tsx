@@ -1,6 +1,7 @@
 import { trpc } from "@/lib/trpc";
-import { COOKIE_NAME, UNAUTHED_ERR_MSG } from '@shared/const';
+import { COOKIE_NAME, NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { getQueryKey } from "@trpc/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
@@ -15,6 +16,12 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (typeof window === "undefined") return;
 
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
+  const isExpiredAdminSession = error.message === NOT_ADMIN_ERR_MSG && window.location.pathname === "/admin";
+
+  if (isExpiredAdminSession) {
+    void queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.auth.me) });
+    return;
+  }
 
   if (!isUnauthorized) return;
 

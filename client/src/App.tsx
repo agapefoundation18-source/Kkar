@@ -11,17 +11,21 @@ import Drivers from "./pages/Drivers";
 import LaunchComingSoon from "./components/LaunchComingSoon";
 import { trpc } from "./lib/trpc";
 import { Button } from "./components/ui/button";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 function Router() {
   const isDriverHost = window.location.hostname === "kkarydriver.aevonindustries.site";
   const launchStatus = trpc.operations.launchStatus.useQuery(undefined, {
     retry: 2,
     refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
+  const [launchEnded, setLaunchEnded] = useState(false);
+  const endLaunch = useCallback(() => setLaunchEnded(true), []);
   const isLegacyDriverPath = !isDriverHost && window.location.pathname === "/drivers";
   const isPublicAppPath = window.location.pathname === "/" &&
     new URLSearchParams(window.location.search).get("mode") !== "app";
+  useEffect(() => setLaunchEnded(false), [launchStatus.data?.launchAt]);
   useEffect(() => {
     if (isLegacyDriverPath) {
       window.location.replace("https://kkarydriver.aevonindustries.site/");
@@ -44,8 +48,16 @@ function Router() {
       </main>
     );
   }
-  if (isPublicAppPath && launchStatus.data?.enabled) {
-    return <LaunchComingSoon launchAt={launchStatus.data.launchAt} />;
+  const launchAt = launchStatus.data?.launchAt;
+  const launchCountdownActive = Boolean(
+    isPublicAppPath &&
+    launchStatus.data?.enabled &&
+    launchAt &&
+    Date.parse(launchAt) > Date.now() &&
+    !launchEnded,
+  );
+  if (launchCountdownActive) {
+    return <LaunchComingSoon launchAt={launchAt!} onCountdownEnd={endLaunch} />;
   }
 
   // make sure to consider if you need authentication for certain routes

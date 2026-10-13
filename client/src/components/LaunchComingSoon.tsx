@@ -17,7 +17,7 @@ function getCountdown(launchAt: string | null) {
   };
 }
 
-export default function LaunchComingSoon({ launchAt }: { launchAt: string | null }) {
+export default function LaunchComingSoon({ launchAt, onCountdownEnd }: { launchAt: string; onCountdownEnd: () => void }) {
   const [email, setEmail] = useState("");
   const [joined, setJoined] = useState(false);
   const [countdown, setCountdown] = useState(() => getCountdown(launchAt));
@@ -31,11 +31,18 @@ export default function LaunchComingSoon({ launchAt }: { launchAt: string | null
   });
 
   useEffect(() => {
-    const updateCountdown = () => setCountdown(getCountdown(launchAt));
+    let ended = false;
+    const updateCountdown = () => {
+      setCountdown(getCountdown(launchAt));
+      if (!ended && Date.parse(launchAt) <= Date.now()) {
+        ended = true;
+        onCountdownEnd();
+      }
+    };
     updateCountdown();
     const timer = window.setInterval(updateCountdown, 1000);
     return () => window.clearInterval(timer);
-  }, [launchAt]);
+  }, [launchAt, onCountdownEnd]);
 
   const units = [
     { label: "Days", value: countdown.days },

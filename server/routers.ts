@@ -59,7 +59,12 @@ async function getLaunchMode(db: NonNullable<Awaited<ReturnType<typeof getDb>>>)
     launchAt: z.string().datetime().nullable(),
   }).safeParse(value);
   if (!result.success) throw new Error("The launch page setting is invalid.");
-  return result.data;
+  return {
+    ...result.data,
+    enabled: result.data.enabled &&
+      result.data.launchAt !== null &&
+      Date.parse(result.data.launchAt) > Date.now(),
+  };
 }
 
 type SupabaseDriverApplication = {
