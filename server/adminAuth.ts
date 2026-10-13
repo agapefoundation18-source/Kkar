@@ -44,5 +44,5 @@ export const ADMIN_COOKIE_OPTIONS = {
   secure: true,
   sameSite: "lax" as const,
   path: "/",
-  maxAge: 60 * 60 * 12,
+  maxAge: 60 * 60 * 12 * 1000,
 };
